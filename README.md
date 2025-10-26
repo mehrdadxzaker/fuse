@@ -29,6 +29,7 @@ Artifacts (sources, IR, simple plans, outputs) are written into `runs/` under ea
 | ----- | ----------- |
 | [DSL reference](docs/dsl_reference.md) | One-page grammar & operator cheatsheet. |
 | [Backend matrix](docs/backend_matrix.md) | Backend capabilities and constraints at a glance. |
+| [CLI usage](docs/cli.md) | Running programs quickly via `python -m fuse run`. |
 
 ## What’s here
 
