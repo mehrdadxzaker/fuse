@@ -28,7 +28,46 @@ dev = [
     "types-requests",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"fuse" = ["py.typed"]
+
 [tool.pytest.ini_options]
 markers = [
     "slow: Marks tests that exercise GPU backends or other slow execution paths.",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E203"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.9"
+warn_unused_configs = true
+ignore_missing_imports = true
+implicit_optional = true
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = "src.fuse.*"
+strict = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+allow_untyped_defs = true
+allow_untyped_calls = true
+implicit_reexport = true
+ignore_missing_imports = true
