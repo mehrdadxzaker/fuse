@@ -35,6 +35,16 @@ uv sync --extra dev
 
 You can swap in other extras (e.g., `--extra torch --extra jax` or `--all-extras`) to mirror the `pip install fuse-ai[...]` flows above.
 
+## Linting & formatting
+
+Install [pre-commit](https://pre-commit.com) and enable the hooks to run Ruff (formatting + lint), pyupgrade, and import sorting automatically:
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
 ## Runtime inputs
 
 - All backends accept source tensors at call time via `runner.run(inputs={"Source": array})`; file paths remain as defaults when no runtime tensors are provided.
