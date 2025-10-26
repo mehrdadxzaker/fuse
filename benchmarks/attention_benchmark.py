@@ -18,8 +18,9 @@ from typing import Any, Callable, Dict, Iterable, Optional
 
 import numpy as np
 
-from fuse import Program, torch as fuse_torch, jax as fuse_jax
-
+from fuse import Program
+from fuse import jax as fuse_jax
+from fuse import torch as fuse_torch
 
 EQS = """
 export Prob
@@ -244,21 +245,39 @@ def format_results(results: Iterable[BenchmarkResult]) -> str:
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Benchmark Fuse attention fast paths on Torch/JAX GPU backends.")
+    parser = argparse.ArgumentParser(
+        description="Benchmark Fuse attention fast paths on Torch/JAX GPU backends."
+    )
     parser.add_argument(
         "--backend",
         choices=("torch", "jax", "all"),
         default="all",
         help="Backend(s) to benchmark (default: all).",
     )
-    parser.add_argument("--device", default="auto", help="Device platform to use (e.g., cuda, gpu, mps, auto).")
-    parser.add_argument("--seq", type=int, default=1024, help="Sequence length for queries (default: 1024).")
-    parser.add_argument("--mem", type=int, default=None, help="Memory length for keys/values (default: seq).")
-    parser.add_argument("--d-model", type=int, default=128, help="Model dimension / attention width (default: 128).")
-    parser.add_argument("--value-dim", type=int, default=128, help="Value dimension (default: 128).")
-    parser.add_argument("--seed", type=int, default=2024, help="Random seed for inputs (default: 2024).")
-    parser.add_argument("--iterations", type=int, default=30, help="Timed iterations per backend (default: 30).")
-    parser.add_argument("--warmup", type=int, default=5, help="Warmup iterations to discard (default: 5).")
+    parser.add_argument(
+        "--device", default="auto", help="Device platform to use (e.g., cuda, gpu, mps, auto)."
+    )
+    parser.add_argument(
+        "--seq", type=int, default=1024, help="Sequence length for queries (default: 1024)."
+    )
+    parser.add_argument(
+        "--mem", type=int, default=None, help="Memory length for keys/values (default: seq)."
+    )
+    parser.add_argument(
+        "--d-model", type=int, default=128, help="Model dimension / attention width (default: 128)."
+    )
+    parser.add_argument(
+        "--value-dim", type=int, default=128, help="Value dimension (default: 128)."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=2024, help="Random seed for inputs (default: 2024)."
+    )
+    parser.add_argument(
+        "--iterations", type=int, default=30, help="Timed iterations per backend (default: 30)."
+    )
+    parser.add_argument(
+        "--warmup", type=int, default=5, help="Warmup iterations to discard (default: 5)."
+    )
     return parser.parse_args(argv)
 
 
@@ -304,7 +323,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             print(f"[skip] {backend}: {exc}", file=sys.stderr)
 
     if not results:
-        print("No backends were benchmarked. Ensure Torch/JAX are installed and a GPU device is available.", file=sys.stderr)
+        print(
+            "No backends were benchmarked. Ensure Torch/JAX are installed and a GPU device is available.",
+            file=sys.stderr,
+        )
         return 1
 
     print(format_results(results))

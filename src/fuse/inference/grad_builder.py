@@ -6,11 +6,10 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from ..core.ir import (
     Equation,
     FuncCall,
-    IndexFunction,
     ProgramIR,
     SliceSpec,
-    Term,
     TensorRef,
+    Term,
 )
 from ..core.program import Program
 
@@ -146,11 +145,7 @@ class GradientBuilder:
         for idx, factor in enumerate(term.factors):
             if not isinstance(factor, TensorRef):
                 continue
-            other_terms = [
-                factor_exprs[j]
-                for j in range(len(factor_exprs))
-                if j != idx
-            ]
+            other_terms = [factor_exprs[j] for j in range(len(factor_exprs)) if j != idx]
             expr_terms = [grad_lhs] + other_terms
             target = self._format_grad_ref(factor)
             lines.append(f"{target} = {' '.join(expr_terms)}")
@@ -171,7 +166,9 @@ class GradientBuilder:
             arg_expr = self._format_tensor_ref(arg)
             axis_expr = self._axis_kwarg(fn, default=-1)
             if axis_expr:
-                lines = [f"{grad_arg} = softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})"]
+                lines = [
+                    f"{grad_arg} = softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})"
+                ]
             else:
                 lines = [f"{grad_arg} = softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs})"]
             return lines

@@ -1,36 +1,35 @@
 from __future__ import annotations
 
+import inspect
 import io
 import math
-import inspect
-
 from dataclasses import replace
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
-from ..core.builtins import read_tensor_from_file, write_tensor_to_file, topk
+from ..core.builtins import read_tensor_from_file, write_tensor_to_file
 from ..core.cache import CacheManager, cache_fingerprint, cache_key_from_fingerprint
 from ..core.evaluator_numpy import (
     ExecutionConfig,
     NumpyRunner,
-    _first_tensor_ref,
     _factor_indices,
+    _first_tensor_ref,
     _normalized_einsum,
 )
 from ..core.ir import (
     Equation,
     FuncCall,
+    IndexFunction,
     ProgramIR,
     TensorRef,
     Term,
-    IndexFunction,
     equation_index_summary,
     format_index_summary,
 )
 from ..core.policies import RuntimePolicies
-from ..core.temperature import coerce_temperature_value
 from ..core.stats import compute_einsum_stats
+from ..core.temperature import coerce_temperature_value
 
 try:
     import torch
@@ -79,6 +78,7 @@ def compile(
 # --------------------------------------------------------------------------- #
 # Torch runtime
 # --------------------------------------------------------------------------- #
+
 
 def _resolve_device(device_spec: str) -> torch.device:
     if torch is None:
@@ -187,14 +187,18 @@ def _coerce_rank_spec(rank: Any) -> Optional[Union[int, List[int]]]:
     raise ValueError(f"Unsupported rank specification for tucker_dense: {rank!r}")
 
 
-def _normalize_tucker_ranks(rank: Optional[Union[int, Sequence[int]]], shape: Sequence[int]) -> List[int]:
+def _normalize_tucker_ranks(
+    rank: Optional[Union[int, Sequence[int]]], shape: Sequence[int]
+) -> List[int]:
     if rank is None:
         return [max(1, min(dim, int(math.ceil(math.sqrt(dim))))) for dim in shape]
     if isinstance(rank, int):
         return [max(1, min(dim, rank)) for dim in shape]
     rank_list = list(rank)
     if len(rank_list) != len(shape):
-        raise ValueError(f"rank specification must match tensor order (got {len(rank_list)} for {len(shape)})")
+        raise ValueError(
+            f"rank specification must match tensor order (got {len(rank_list)} for {len(shape)})"
+        )
     normalized: List[int] = []
     for dim, item in zip(shape, rank_list):
         val = int(item)
@@ -235,12 +239,11 @@ def _torch_tucker_dense(
         for mode, dim in enumerate(x.shape):
             unfolded = torch.movedim(x, mode, 0).reshape(dim, -1)
             try:
-                u, s, vh = torch.linalg.svd(unfolded, full_matrices=False)
+                u, _, _ = torch.linalg.svd(unfolded, full_matrices=False)
             except RuntimeError:
                 cpu_unfolded = unfolded.detach().cpu()
-                u_cpu, s_cpu, vh_cpu = torch.linalg.svd(cpu_unfolded, full_matrices=False)
+                u_cpu, _, _ = torch.linalg.svd(cpu_unfolded, full_matrices=False)
                 u = u_cpu.to(unfolded.device)
-                vh = vh_cpu.to(unfolded.device)
             r = min(ranks[mode], u.shape[1])
             factors.append(u[:, :r].contiguous())
         core = x
@@ -273,6 +276,7 @@ def _json_ready(value: Any) -> Any:
         return [_json_ready(v) for v in value]
     return str(value)
 
+
 def _maybe_torch_compile(fn):
     if _TORCH_COMPILE is None:
         return fn
@@ -281,12 +285,14 @@ def _maybe_torch_compile(fn):
     except Exception:
         return fn
 
+
 def _ensure_scalar_tensor(value: Any, *, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
     if isinstance(value, torch.Tensor):
         if value.numel() != 1:
             raise ValueError("Expected scalar tensor for fill value")
         return value.to(dtype=dtype, device=device).reshape(())
     return torch.tensor(float(value), dtype=dtype, device=device)
+
 
 def _torch_layer_norm(x: torch.Tensor, axis: int, eps: float = 1e-5) -> torch.Tensor:
     if axis < 0:
@@ -305,7 +311,10 @@ def _torch_layer_norm(x: torch.Tensor, axis: int, eps: float = 1e-5) -> torch.Te
     normalized = F.layer_norm(transposed, transposed.shape[-1:], eps=eps)
     return normalized.permute(*inv_perm)
 
-def _torch_masked_softmax(x: torch.Tensor, mask: Optional[torch.Tensor], *, dim: int, fill_value: Optional[Any]) -> torch.Tensor:
+
+def _torch_masked_softmax(
+    x: torch.Tensor, mask: Optional[torch.Tensor], *, dim: int, fill_value: Optional[Any]
+) -> torch.Tensor:
     if not torch.is_floating_point(x):
         raise ValueError("masked_softmax requires floating point inputs")
     if mask is None:
@@ -321,13 +330,18 @@ def _torch_masked_softmax(x: torch.Tensor, mask: Optional[torch.Tensor], *, dim:
     cache_key = (tuple(x.shape), x.dtype, mask.dtype, dim)
     fn = _MASKED_SOFTMAX_CACHE.get(cache_key)
     if fn is None:
-        def _masked_softmax_impl(scores: torch.Tensor, mask_tensor: torch.Tensor, fill_scalar: torch.Tensor) -> torch.Tensor:
+
+        def _masked_softmax_impl(
+            scores: torch.Tensor, mask_tensor: torch.Tensor, fill_scalar: torch.Tensor
+        ) -> torch.Tensor:
             logits = scores.masked_fill(~mask_tensor, fill_scalar)
             probs = F.softmax(logits, dim=dim)
             return probs.masked_fill(~mask_tensor, 0.0)
+
         fn = _maybe_torch_compile(_masked_softmax_impl)
         _MASKED_SOFTMAX_CACHE[cache_key] = fn
     return fn(x, mask, fill_tensor)
+
 
 if F is not None and hasattr(F, "scaled_dot_product_attention"):
     try:
@@ -336,6 +350,7 @@ if F is not None and hasattr(F, "scaled_dot_product_attention"):
         _HAS_SDP_SCALE = False
 else:
     _HAS_SDP_SCALE = False
+
 
 def _promote_attention_tensor(tensor: torch.Tensor) -> Tuple[torch.Tensor, int]:
     original_dim = tensor.dim()
@@ -347,6 +362,7 @@ def _promote_attention_tensor(tensor: torch.Tensor) -> Tuple[torch.Tensor, int]:
         return tensor.unsqueeze(0).unsqueeze(0), original_dim
     raise ValueError("attention expects tensors with rank >= 2")
 
+
 def _restore_attention_tensor(tensor: torch.Tensor, original_dim: int) -> torch.Tensor:
     if original_dim == 4:
         return tensor
@@ -355,6 +371,7 @@ def _restore_attention_tensor(tensor: torch.Tensor, original_dim: int) -> torch.
     if original_dim == 2:
         return tensor.squeeze(0).squeeze(0)
     raise ValueError("Invalid original shape for attention restore")
+
 
 def _scalar_from_value(value: Any) -> Optional[float]:
     if value is None:
@@ -368,6 +385,7 @@ def _scalar_from_value(value: Any) -> Optional[float]:
             raise ValueError("Attention scale must be a scalar array")
         return float(value.reshape(()))
     return float(value)
+
 
 def _torch_attention(
     query: torch.Tensor,
@@ -476,12 +494,14 @@ def _torch_const(
         zero_copy=zero_copy,
     )
 
+
 def _torch_gelu_grad(x: torch.Tensor) -> torch.Tensor:
     c = math.sqrt(2.0 / math.pi)
     inner = c * (x + 0.044715 * torch.pow(x, 3))
     tanh_inner = torch.tanh(inner)
     sech2 = 1.0 - torch.pow(tanh_inner, 2)
     return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * torch.pow(x, 2)))
+
 
 def _torch_softmax_grad(y: torch.Tensor, grad: torch.Tensor, axis: int) -> torch.Tensor:
     dot = torch.sum(grad * y, dim=axis, keepdim=True)
@@ -658,9 +678,7 @@ class TorchRunner:
             kind = entry.get("kind")
             if kind == "source":
                 src = entry["source"]
-                lines.append(
-                    f"[src] {src['name']} <- {src['path']} shape={tuple(src['shape'])}"
-                )
+                lines.append(f"[src] {src['name']} <- {src['path']} shape={tuple(src['shape'])}")
             elif kind == "equation":
                 eq = entry["equation"]
                 projected = eq.get("projected") or []
@@ -684,20 +702,14 @@ class TorchRunner:
                 table = eq.get("index_table")
                 if table:
                     details.append(f"idx[{table}]")
-                timing = (
-                    f" {eq['duration_ms']:.3f}ms"
-                    if eq["duration_ms"] is not None
-                    else ""
-                )
+                timing = f" {eq['duration_ms']:.3f}ms" if eq["duration_ms"] is not None else ""
                 note = f" {' '.join(details)}" if details else ""
                 lines.append(
                     f"[iter {eq['iteration']:02d}] {eq['name']} {eq['status']}{timing}{note}"
                 )
             elif kind == "sink":
                 sk = entry["sink"]
-                lines.append(
-                    f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})"
-                )
+                lines.append(f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})")
         return "\n".join(lines)
 
     # Internal helpers -------------------------------------------------------
@@ -799,7 +811,9 @@ class TorchRunner:
     def _run_single_pass(self, cfg: ExecutionConfig):
         groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
         for name, eqs in groups:
-            self._evaluate_group(name, eqs, iteration=0, tol=cfg.tol, capture_timing=cfg.explain_timings)
+            self._evaluate_group(
+                name, eqs, iteration=0, tol=cfg.tol, capture_timing=cfg.explain_timings
+            )
 
     def _run_fixpoint(self, cfg: ExecutionConfig):
         groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
@@ -846,7 +860,11 @@ class TorchRunner:
 
         try:
             for eq in equations:
-                start = torch.cuda.Event(enable_timing=True) if (capture_timing and self.device.type == "cuda") else None
+                start = (
+                    torch.cuda.Event(enable_timing=True)
+                    if (capture_timing and self.device.type == "cuda")
+                    else None
+                )
                 end = torch.cuda.Event(enable_timing=True) if start else None
                 if start:
                     torch.cuda.synchronize(self.device)
@@ -873,7 +891,9 @@ class TorchRunner:
                 metas.append(meta)
                 durations.append(duration_ms)
                 if self._is_boolean_tensor(lhs_name):
-                    running_total = value if running_total is None else torch.maximum(running_total, value)
+                    running_total = (
+                        value if running_total is None else torch.maximum(running_total, value)
+                    )
                 else:
                     running_total = value if running_total is None else running_total + value
                 if running_total is not None:
@@ -897,8 +917,10 @@ class TorchRunner:
         changed = self._assign(lhs, total, tol)
 
         for idx, (eq, meta) in enumerate(zip(equations, metas)):
-            status = "update" if (changed and idx == len(equations) - 1) else (
-                "unchanged" if (not changed and idx == len(equations) - 1) else "contrib"
+            status = (
+                "update"
+                if (changed and idx == len(equations) - 1)
+                else ("unchanged" if (not changed and idx == len(equations) - 1) else "contrib")
             )
             self._log_equation(
                 eq,
@@ -1053,9 +1075,7 @@ class TorchRunner:
     ) -> torch.Tensor:
         length = axis_lengths.get(fn.axis)
         if length is None:
-            raise ValueError(
-                f"Axis '{fn.axis}' length unknown for index function '{fn.name}'"
-            )
+            raise ValueError(f"Axis '{fn.axis}' length unknown for index function '{fn.name}'")
         indices = torch.arange(length, device=self.device)
         if fn.name == "even":
             mask = (indices % 2) == 0
@@ -1099,7 +1119,9 @@ class TorchRunner:
         if lhs is not None:
             lhs_output_indices = [idx for idx in lhs.indices if idx not in lhs.rolling]
 
-        def _shapes_and_sizes(arrays: Sequence[torch.Tensor]) -> Tuple[List[Tuple[int, ...]], List[int]]:
+        def _shapes_and_sizes(
+            arrays: Sequence[torch.Tensor],
+        ) -> Tuple[List[Tuple[int, ...]], List[int]]:
             shapes: List[Tuple[int, ...]] = []
             sizes: List[int] = []
             for tensor in arrays:
@@ -1212,15 +1234,21 @@ class TorchRunner:
         if name == "gelu_grad":
             return _torch_gelu_grad(eval_arg(args_expr[0]))
         if name == "lnorm":
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             eps = float(fn.kwargs.get("eps", 1e-5))
             return _torch_lnorm(self._as_tensor(eval_arg(args_expr[0])), axis=axis, eps=eps)
         if name in {"layernorm", "layer_norm"}:
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             eps = float(fn.kwargs.get("eps", 1e-5))
             return _torch_layer_norm(self._as_tensor(eval_arg(args_expr[0])), axis=axis, eps=eps)
         if name == "softmax":
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             mask_expr: Optional[Any] = None
             if len(args_expr) > 1:
                 mask_expr = args_expr[1]
@@ -1240,7 +1268,9 @@ class TorchRunner:
         if name == "masked_softmax":
             if not args_expr:
                 raise ValueError("masked_softmax requires logits argument")
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             mask_expr: Optional[Any] = None
             if len(args_expr) > 1:
                 mask_expr = args_expr[1]
@@ -1260,7 +1290,9 @@ class TorchRunner:
                 raise ValueError("softmax_grad requires probabilities and gradient arguments")
             probs = eval_arg(args_expr[0])
             grad = eval_arg(args_expr[1])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             return _torch_softmax_grad(probs, grad, axis)
         if name == "sin":
             if not args_expr:

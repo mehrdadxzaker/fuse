@@ -1,10 +1,4 @@
-import sys
-from pathlib import Path
-
 import numpy as np
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
 from fuse import ExecutionConfig, Program
 from fuse.core.temperature import ConstantSchedule, PiecewiseSchedule, coerce_temperature_value

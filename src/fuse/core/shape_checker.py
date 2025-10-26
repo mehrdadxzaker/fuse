@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set
 
 from .exceptions import ShapeError
-from .ir import Equation, FuncCall, IndexFunction, ProgramIR, Term, TensorRef
+from .ir import Equation, FuncCall, IndexFunction, ProgramIR, TensorRef, Term
 
 
 @dataclass
@@ -60,9 +60,7 @@ def _validate_equation(eq: Equation) -> None:
     missing_axes = sorted(axis for axis in lhs_axis_set if axis not in usage)
 
     stray_axes = sorted(
-        axis
-        for axis, info in usage.items()
-        if axis not in lhs_axis_set and len(info.sources) <= 1
+        axis for axis, info in usage.items() if axis not in lhs_axis_set and len(info.sources) <= 1
     )
 
     # TensorRef-only assignments behave like broadcast; project-only axes are not allowed.

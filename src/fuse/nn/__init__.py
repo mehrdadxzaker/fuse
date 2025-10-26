@@ -11,7 +11,7 @@ runtime weight store (for example using :class:`~fuse.core.policies.InMemoryWeig
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, Sequence, Tuple
+from typing import Tuple
 
 from ..core.program import Program
 
@@ -148,6 +148,7 @@ def transformer_encoder() -> Program:
 
 # ---------------------------------------------------------------------------
 # Graph neural network message passing
+
 
 @dataclass(frozen=True)
 class _GNNSpec:

@@ -156,7 +156,7 @@ def make_schedule(spec: TemperatureSpec) -> TemperatureSchedule:
 
 
 def normalize_temperature_map(
-    mapping: Optional[Mapping[str, TemperatureSpec]]
+    mapping: Optional[Mapping[str, TemperatureSpec]],
 ) -> Optional[Dict[str, TemperatureSchedule]]:
     if mapping is None:
         return None

@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from fuse import Program, gradients_for_program
 from tests._torch_utils import require_torch
@@ -100,9 +99,7 @@ def test_bpts_matches_torch_baseline():
             "root": 0,
         },
         {
-            "features": np.array(
-                [[-0.3, 0.5, -0.2], [0.4, -0.1, 0.2]], dtype=np.float32
-            ),
+            "features": np.array([[-0.3, 0.5, -0.2], [0.4, -0.1, 0.2]], dtype=np.float32),
             "edges": np.array([[0.0, 1.0], [0.0, 0.0]], dtype=np.float32),
             "target": -0.1,
             "root": 0,
@@ -113,7 +110,12 @@ def test_bpts_matches_torch_baseline():
                 dtype=np.float32,
             ),
             "edges": np.array(
-                [[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+                [
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                ],
                 dtype=np.float32,
             ),
             "target": 0.2,

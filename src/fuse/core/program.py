@@ -1,7 +1,9 @@
 from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
-from .parser import parse
+from .cache import CacheManager, build_cache_key, compute_program_hash
+from .evaluator_numpy import DemandNumpyRunner, ExecutionConfig, NumpyRunner
+from .exceptions import BackendError
 from .ir import (
     ProgramIR,
     TensorRef,
@@ -11,11 +13,10 @@ from .ir import (
     lhs_indices,
     rhs_indices,
 )
-from .evaluator_numpy import ExecutionConfig, NumpyRunner, DemandNumpyRunner
-from .cache import CacheManager, build_cache_key, compute_program_hash
+from .parser import parse
 from .policies import RuntimePolicies
-from .exceptions import BackendError
 from .shape_checker import validate_program_shapes
+
 
 class Program:
     def __init__(self, eqs: str):
@@ -149,9 +150,7 @@ class Program:
         lines: List[str] = []
         for src in sources:
             indices = ",".join(src["indices"]) if src["indices"] else "-"
-            lines.append(
-                f"[src] {src['name']} <- {src.get('path') or '<memory>'} idx[{indices}]"
-            )
+            lines.append(f"[src] {src['name']} <- {src.get('path') or '<memory>'} idx[{indices}]")
         for entry in equations:
             table = entry["index_table"]
             proj = entry["projection"]
@@ -166,8 +165,10 @@ class Program:
     def _resolve_backend(self, backend: str):
         if backend == "torch":
             from ..torch_backend.compile import compile as torch_compile
+
             return torch_compile
         if backend == "jax":
             from ..jax_backend.compile import compile as jax_compile
+
             return jax_compile
         raise BackendError(f"Unknown backend '{backend}'")

@@ -5,7 +5,18 @@ import json
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 
@@ -14,6 +25,9 @@ from .exceptions import BackendError
 ArrayLike = Union[np.ndarray, Sequence[float], Sequence[int], float, int]
 
 _DEFAULT_NPZ_MMAP_THRESHOLD = 64 * 1024 * 1024  # 64 MiB
+
+if TYPE_CHECKING:
+    import torch
 
 
 class WeightStore(Protocol):
@@ -263,7 +277,9 @@ def _load_array_from_path(
     if dtype is not None:
         converted = result.astype(dtype, copy=False)
         if strict and converted is not result and isinstance(result, np.memmap):
-            raise RuntimeError(f"Strict loading forbids dtype conversion of '{path.name}' that materializes data")
+            raise RuntimeError(
+                f"Strict loading forbids dtype conversion of '{path.name}' that materializes data"
+            )
         result = converted
     if strict and not isinstance(result, np.memmap):
         raise RuntimeError(f"Strict loading forbids materializing array '{path.name}'")
@@ -309,7 +325,9 @@ class QuantizedSpec:
             mmap_threshold=mmap_threshold,
             strict=strict,
         )
-        return cls(mode=mode, scale=scale, zero_point=zero_point, dtype=dtype, group_size=group_size)
+        return cls(
+            mode=mode, scale=scale, zero_point=zero_point, dtype=dtype, group_size=group_size
+        )
 
     def is_active(self) -> bool:
         return self.mode != "none"
@@ -331,7 +349,9 @@ class QuantizedSpec:
         if self.dtype not in {"int8", "uint8"}:
             raise ValueError(f"Unsupported quantized dtype '{self.dtype}' (expected int8/uint8)")
 
-    def _broadcast_params_numpy(self, values: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def _broadcast_params_numpy(
+        self, values: np.ndarray
+    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         try:
             scale = np.broadcast_to(self.scale, values.shape).astype(np.float32, copy=False)
         except ValueError as exc:
@@ -475,7 +495,9 @@ class LoRASpec:
             if down is None:
                 raise ValueError(f"LoRA adapter '{name}' requires 'down'")
             alpha = float(adapter_conf.get("alpha", mapping.get("alpha", 1.0)))
-            adapters[name] = LoRAAdapter(name=name, up=up.astype(np.float32), down=down.astype(np.float32), alpha=alpha)
+            adapters[name] = LoRAAdapter(
+                name=name, up=up.astype(np.float32), down=down.astype(np.float32), alpha=alpha
+            )
         default = mapping.get("default")
         if default is None and adapters:
             default = next(iter(adapters))
@@ -506,7 +528,9 @@ class PrefetchSpec:
     order: int = 0
 
     @classmethod
-    def from_mapping(cls, mapping: Optional[Mapping[str, Any]], default_order: int) -> "PrefetchSpec":
+    def from_mapping(
+        cls, mapping: Optional[Mapping[str, Any]], default_order: int
+    ) -> "PrefetchSpec":
         if mapping is None:
             return cls(order=default_order)
         window = int(mapping.get("window", 0))
@@ -523,13 +547,19 @@ class WeightShard:
     dtype: Optional[np.dtype] = None
 
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any], *, base_path: Optional[Path]) -> "WeightShard":
+    def from_mapping(
+        cls, mapping: Mapping[str, Any], *, base_path: Optional[Path]
+    ) -> "WeightShard":
         path = mapping.get("path")
         if path is None:
             raise ValueError("Weight shard requires 'path'")
         axis = mapping.get("axis")
         dtype = mapping.get("dtype")
-        return cls(path=_ensure_path(path, base_path), axis=axis, dtype=np.dtype(dtype) if dtype is not None else None)
+        return cls(
+            path=_ensure_path(path, base_path),
+            axis=axis,
+            dtype=np.dtype(dtype) if dtype is not None else None,
+        )
 
 
 @dataclass
@@ -596,7 +626,9 @@ class WeightManifestEntry:
             mmap_threshold=mmap_threshold,
             strict=strict,
         )
-        prefetch_spec = PrefetchSpec.from_mapping(mapping.get("prefetch"), default_order=default_order)
+        prefetch_spec = PrefetchSpec.from_mapping(
+            mapping.get("prefetch"), default_order=default_order
+        )
         placement = mapping.get("placement")
         metadata = dict(mapping.get("metadata", {}))
         return cls(
@@ -652,7 +684,8 @@ def _lora_spec_fingerprint(spec: Optional[LoRASpec]) -> Optional[Dict[str, Any]]
         "merge": spec.merge,
         "default": spec.default,
         "adapters": {
-            str(name): _lora_adapter_fingerprint(adapter) for name, adapter in sorted(spec.adapters.items())
+            str(name): _lora_adapter_fingerprint(adapter)
+            for name, adapter in sorted(spec.adapters.items())
         },
     }
 
@@ -760,7 +793,9 @@ class ManifestWeightStore(WeightStore):
     ):
         self.cache_bytes = int(cache_bytes)
         self.mmap_mode = bool(mmap_mode)
-        self.mmap_threshold = int(mmap_threshold_bytes) if mmap_threshold_bytes is not None else None
+        self.mmap_threshold = (
+            int(mmap_threshold_bytes) if mmap_threshold_bytes is not None else None
+        )
         self.strict_mode = bool(strict)
         self._entries: Dict[str, WeightManifestEntry] = {}
         self._cache: OrderedDict[str, ResolvedWeight] = OrderedDict()
@@ -965,7 +1000,9 @@ class ManifestWeightStore(WeightStore):
             "entries": entries,
             "cache_bytes": int(self.cache_bytes),
             "mmap_mode": bool(self.mmap_mode),
-            "mmap_threshold_bytes": int(self.mmap_threshold) if self.mmap_threshold is not None else None,
+            "mmap_threshold_bytes": int(self.mmap_threshold)
+            if self.mmap_threshold is not None
+            else None,
             "strict_mode": bool(self.strict_mode),
             "active_adapters": {
                 str(slot): adapter for slot, adapter in sorted(self._active_adapters.items())
@@ -1089,9 +1126,16 @@ class RuntimePolicies:
         if backend == "torch":
             import torch
 
-            tensor = materialized if isinstance(materialized, torch.Tensor) else torch.as_tensor(materialized, device=device)
+            tensor = (
+                materialized
+                if isinstance(materialized, torch.Tensor)
+                else torch.as_tensor(materialized, device=device)
+            )
             if self.quantization is not None and not managed_quant:
-                tensor = torch.as_tensor(self.quantization.apply(name, tensor.detach().cpu().numpy()), device=tensor.device)
+                tensor = torch.as_tensor(
+                    self.quantization.apply(name, tensor.detach().cpu().numpy()),
+                    device=tensor.device,
+                )
             if self.lora is not None and not managed_lora:
                 tensor_np = tensor.detach().cpu().numpy()
                 tensor = torch.as_tensor(self.lora.apply(name, tensor_np), device=tensor.device)
@@ -1119,7 +1163,9 @@ class RuntimePolicies:
         return {
             "weight_store": _fingerprint_weight_store(self.weight_store),
             "sharding": self.sharding.fingerprint() if self.sharding is not None else None,
-            "quantization": self.quantization.fingerprint() if self.quantization is not None else None,
+            "quantization": self.quantization.fingerprint()
+            if self.quantization is not None
+            else None,
             "lora": self.lora.fingerprint() if self.lora is not None else None,
             "output_root": _fingerprint_path(self.output_root),
         }

@@ -1,12 +1,12 @@
 import itertools
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set, Any
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
-from ..core.program import Program
-from ..core.policies import InMemoryWeightStore, RuntimePolicies
 from ..core.evaluator_numpy import ExecutionConfig
+from ..core.policies import InMemoryWeightStore, RuntimePolicies
+from ..core.program import Program
 
 
 @dataclass(frozen=True)
@@ -25,8 +25,7 @@ class Factor:
         table = np.asarray(self.table, dtype=np.float64)
         if table.ndim != len(self.scope):
             raise ValueError(
-                f"Factor '{self.name}' table rank {table.ndim} "
-                f"does not match scope {self.scope}"
+                f"Factor '{self.name}' table rank {table.ndim} does not match scope {self.scope}"
             )
         if np.any(table < 0):
             raise ValueError(f"Factor '{self.name}' contains negative entries")
@@ -45,9 +44,7 @@ class TreeProgram:
         *,
         config: Optional[ExecutionConfig] = None,
     ):
-        policies = RuntimePolicies(
-            weight_store=InMemoryWeightStore(self.weights.copy())
-        )
+        policies = RuntimePolicies(weight_store=InMemoryWeightStore(self.weights.copy()))
         return self.program.compile(config=config, policies=policies)
 
     @property
@@ -80,9 +77,7 @@ class TreeFactorGraph:
                 raise ValueError(f"Duplicate factor '{factor.name}'")
             for axis in factor.scope:
                 if axis not in self.variables:
-                    raise ValueError(
-                        f"Factor '{factor.name}' references unknown variable '{axis}'"
-                    )
+                    raise ValueError(f"Factor '{factor.name}' references unknown variable '{axis}'")
             expected_shape = tuple(self.variables[axis].cardinality for axis in factor.scope)
             if factor.table.shape != expected_shape:
                 raise ValueError(
@@ -153,9 +148,7 @@ class TreeFactorGraph:
         prog_e_lhs = self._format_indices("ProgE", ())
         prog_e_terms = list(root_terms)
         for var_name in query_tuple:
-            prog_e_terms.append(
-                self._evidence_tensor_name(var_name, index=var_name)
-            )
+            prog_e_terms.append(self._evidence_tensor_name(var_name, index=var_name))
         final_lines.append(f"{prog_e_lhs} = {' '.join(prog_e_terms)}")
         final_lines.append("export ProgQE")
         final_lines.append("export ProgE")
@@ -175,9 +168,7 @@ class TreeFactorGraph:
         nodes = list(adjacency.keys())
         edges = sum(len(neigh) for neigh in adjacency.values()) // 2
         if edges != len(nodes) - 1:
-            raise ValueError(
-                "Factor graph must be a tree (edges != nodes - 1)"
-            )
+            raise ValueError("Factor graph must be a tree (edges != nodes - 1)")
         # Ensure connectivity
         start = nodes[0]
         stack = [start]
@@ -218,14 +209,10 @@ class TreeFactorGraph:
 
     def _emit_factor_to_var(self, factor_name: str, var_name: str) -> str:
         factor = self.factors[factor_name]
-        neighbors = [
-            axis for axis in factor.scope if axis != var_name
-        ]
+        neighbors = [axis for axis in factor.scope if axis != var_name]
         terms = [self._factor_tensor_name(factor.name, factor.scope)]
         for child_var in neighbors:
-            terms.append(
-                self._msg_var_to_factor_name(child_var, factor.name, index=child_var)
-            )
+            terms.append(self._msg_var_to_factor_name(child_var, factor.name, index=child_var))
         lhs = self._msg_factor_to_var_name(factor.name, var_name, index=var_name)
         return f"{lhs} = {' '.join(terms)}"
 
@@ -234,9 +221,7 @@ class TreeFactorGraph:
         for neighbor in self._variable_neighbors(var_name):
             if neighbor == factor_name:
                 continue
-            terms.append(
-                self._msg_factor_to_var_name(neighbor, var_name, index=var_name)
-            )
+            terms.append(self._msg_factor_to_var_name(neighbor, var_name, index=var_name))
         lhs = self._msg_var_to_factor_name(var_name, factor_name, index=var_name)
         return f"{lhs} = {' '.join(terms)}"
 
@@ -266,15 +251,11 @@ class TreeFactorGraph:
         if isinstance(value, (list, tuple, np.ndarray)):
             arr = np.asarray(value, dtype=np.float64)
             if arr.shape != (var.cardinality,):
-                raise ValueError(
-                    f"Evidence for '{var.name}' must have shape {(var.cardinality,)}"
-                )
+                raise ValueError(f"Evidence for '{var.name}' must have shape {(var.cardinality,)}")
             return arr
         index = int(value)
         if index < 0 or index >= var.cardinality:
-            raise ValueError(
-                f"Evidence value {index} out of range for variable '{var.name}'"
-            )
+            raise ValueError(f"Evidence value {index} out of range for variable '{var.name}'")
         arr = np.zeros(var.cardinality, dtype=np.float64)
         arr[index] = 1.0
         return arr

@@ -2,7 +2,6 @@ import numpy as np
 
 from fuse import ExecutionConfig, InMemoryWeightStore, Program, RuntimePolicies
 
-
 GRID_MRF_PROGRAM = """
 Grid[r, c, u, d] = InputGrid[r, c, u, d]
 PairWeight[u, d] = InputWeight[u, d]
@@ -15,9 +14,7 @@ def _compile_with_grid(grid, config: ExecutionConfig):
     grid = np.asarray(grid)
     weight = np.ones(grid.shape[2:], dtype=grid.dtype)
     policies = RuntimePolicies(
-        weight_store=InMemoryWeightStore(
-            {"InputGrid": grid, "InputWeight": weight}
-        )
+        weight_store=InMemoryWeightStore({"InputGrid": grid, "InputWeight": weight})
     )
     program = Program(GRID_MRF_PROGRAM)
     return program.compile(config=config, policies=policies)

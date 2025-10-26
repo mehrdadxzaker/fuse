@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fuse import ExecutionConfig, Program, torch as fuse_torch
-
+from fuse import ExecutionConfig, Program
+from fuse import torch as fuse_torch
 
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)

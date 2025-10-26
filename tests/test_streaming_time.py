@@ -2,7 +2,6 @@ import numpy as np
 
 from fuse import Program
 
-
 STREAMING_PROGRAM = """
 Input[i]          = const([0.2,-0.1])
 Weight[i,j]       = const([[0.5,-0.3],[0.1,0.4]])

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -12,28 +12,28 @@ from ..core.cache import CacheManager
 from ..core.evaluator_numpy import (
     ExecutionConfig,
     NumpyRunner,
-    _first_tensor_ref,
     _factor_indices,
+    _first_tensor_ref,
     _normalized_einsum,
 )
 from ..core.ir import (
     Equation,
     FuncCall,
+    IndexFunction,
     ProgramIR,
     TensorRef,
     Term,
-    IndexFunction,
     equation_index_summary,
     format_index_summary,
 )
 from ..core.policies import RuntimePolicies
-from ..core.temperature import coerce_temperature_value
 from ..core.stats import compute_einsum_stats
+from ..core.temperature import coerce_temperature_value
 
 try:
     import jax
-    import jax.numpy as jnp
     import jax.nn as jnn
+    import jax.numpy as jnp
 except Exception:  # pragma: no cover - jax optional
     jax = None
     jnp = None
@@ -77,6 +77,7 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_ready(v) for v in value]
     return str(value)
+
 
 def _resolve_device(device_spec: str):
     if jax is None:
@@ -143,6 +144,7 @@ def _resolve_precision_dtype(precision: str, device) -> Any:
         return jnp.float32
     raise ValueError(f"Unsupported precision '{precision}' for JAX backend")
 
+
 def _jax_gelu_grad(x):
     c = jnp.sqrt(2.0 / jnp.pi)
     inner = c * (x + 0.044715 * jnp.power(x, 3))
@@ -150,14 +152,17 @@ def _jax_gelu_grad(x):
     sech2 = 1.0 - jnp.power(tanh_inner, 2)
     return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * jnp.power(x, 2)))
 
+
 def _jax_softmax_grad(y, grad, axis: int):
     dot = jnp.sum(grad * y, axis=axis, keepdims=True)
     return (grad - dot) * y
+
 
 def _jax_layer_norm(x, axis: int, eps: float = 1e-5):
     mean = jnp.mean(x, axis=axis, keepdims=True)
     var = jnp.mean((x - mean) ** 2, axis=axis, keepdims=True)
     return (x - mean) / jnp.sqrt(var + eps)
+
 
 def _jax_masked_softmax(x, mask=None, axis: int = -1, fill_value=None):
     arr = jnp.asarray(x)
@@ -178,6 +183,7 @@ def _jax_masked_softmax(x, mask=None, axis: int = -1, fill_value=None):
     if mask_arr is not None:
         result = jnp.where(mask_arr, result, 0.0)
     return result
+
 
 def _jax_attention(query, key, value, mask=None, scale=None, causal=False):
     q = jnp.asarray(query)
@@ -230,7 +236,9 @@ def _normalize_tucker_ranks(rank, shape):
         return [max(1, min(dim, rank)) for dim in shape]
     rank_list = list(rank)
     if len(rank_list) != len(shape):
-        raise ValueError(f"rank specification must match tensor order (got {len(rank_list)} for {len(shape)})")
+        raise ValueError(
+            f"rank specification must match tensor order (got {len(rank_list)} for {len(shape)})"
+        )
     normalized = []
     for dim, item in zip(shape, rank_list):
         val = int(item)
@@ -332,7 +340,9 @@ class JaxRunner:
         self.device = None if jax is None else _resolve_device(device)
         self.zero_copy = self.config.zero_copy
         self.default_dtype = (
-            jnp.float32 if jnp is None else _resolve_precision_dtype(self.config.precision, self.device)
+            jnp.float32
+            if jnp is None
+            else _resolve_precision_dtype(self.config.precision, self.device)
         )
         self.validate_transfers = self.config.validate_device_transfers
         self._xla_callable: Optional[Any] = None
@@ -424,9 +434,7 @@ class JaxRunner:
             kind = entry.get("kind")
             if kind == "source":
                 src = entry["source"]
-                lines.append(
-                    f"[src] {src['name']} <- {src['path']} shape={tuple(src['shape'])}"
-                )
+                lines.append(f"[src] {src['name']} <- {src['path']} shape={tuple(src['shape'])}")
             elif kind == "equation":
                 eq = entry["equation"]
                 projected = eq.get("projected") or []
@@ -451,14 +459,10 @@ class JaxRunner:
                 if table:
                     details.append(f"idx[{table}]")
                 note = f" {' '.join(details)}" if details else ""
-                lines.append(
-                    f"[iter {eq['iteration']:02d}] {eq['name']} {eq['status']}{note}"
-                )
+                lines.append(f"[iter {eq['iteration']:02d}] {eq['name']} {eq['status']}{note}")
             elif kind == "sink":
                 sk = entry["sink"]
-                lines.append(
-                    f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})"
-                )
+                lines.append(f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})")
         return "\n".join(lines)
 
     # Preparation ------------------------------------------------------------
@@ -504,7 +508,6 @@ class JaxRunner:
             if isinstance(value, np.ndarray) and not self.zero_copy:
                 material = np.array(value, copy=True)
             arr = jnp.asarray(material, dtype=self.default_dtype)
-        host_value = not isinstance(value, jnp.ndarray)
         arr_device = None
         if self.device is not None:
             try:
@@ -648,7 +651,9 @@ class JaxRunner:
                 contributions.append(value)
                 metas.append(meta)
                 if self._is_boolean_tensor(lhs_name):
-                    running_total = value if running_total is None else jnp.maximum(running_total, value)
+                    running_total = (
+                        value if running_total is None else jnp.maximum(running_total, value)
+                    )
                 else:
                     running_total = value if running_total is None else running_total + value
                 if running_total is not None:
@@ -672,8 +677,10 @@ class JaxRunner:
         changed = self._assign(lhs, total, tol)
 
         for idx, eq in enumerate(equations):
-            status = "update" if (changed and idx == len(equations) - 1) else (
-                "unchanged" if (not changed and idx == len(equations) - 1) else "contrib"
+            status = (
+                "update"
+                if (changed and idx == len(equations) - 1)
+                else ("unchanged" if (not changed and idx == len(equations) - 1) else "contrib")
             )
             self._log_equation(eq, metas[idx], iteration=iteration, status=status)
         return changed
@@ -820,9 +827,7 @@ class JaxRunner:
     ):
         length = axis_lengths.get(fn.axis)
         if length is None:
-            raise ValueError(
-                f"Axis '{fn.axis}' length unknown for index function '{fn.name}'"
-            )
+            raise ValueError(f"Axis '{fn.axis}' length unknown for index function '{fn.name}'")
         indices = jnp.arange(length, dtype=jnp.int32)
         if fn.name == "even":
             mask = (indices % 2) == 0
@@ -984,14 +989,22 @@ class JaxRunner:
         if name == "gelu_grad":
             return _jax_gelu_grad(eval_array(args_expr[0])).astype(self.default_dtype)
         if name == "lnorm":
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             return _jax_layer_norm(eval_array(args_expr[0]), axis=axis).astype(self.default_dtype)
         if name in {"layernorm", "layer_norm"}:
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             eps = float(fn.kwargs.get("eps", 1e-5))
-            return _jax_layer_norm(eval_array(args_expr[0]), axis=axis, eps=eps).astype(self.default_dtype)
+            return _jax_layer_norm(eval_array(args_expr[0]), axis=axis, eps=eps).astype(
+                self.default_dtype
+            )
         if name == "softmax":
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             mask_expr: Optional[Any] = None
             if len(args_expr) > 1:
                 mask_expr = args_expr[1]
@@ -1010,11 +1023,15 @@ class JaxRunner:
                 ).astype(self.default_dtype)
             if jnn is not None:
                 return jnn.softmax(logits, axis=axis).astype(self.default_dtype)
-            return _jax_masked_softmax(logits, mask=None, axis=axis, fill_value=None).astype(self.default_dtype)
+            return _jax_masked_softmax(logits, mask=None, axis=axis, fill_value=None).astype(
+                self.default_dtype
+            )
         if name == "masked_softmax":
             if not args_expr:
                 raise ValueError("masked_softmax requires logits argument")
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             mask_expr: Optional[Any] = None
             if len(args_expr) > 1:
                 mask_expr = args_expr[1]
@@ -1039,7 +1056,9 @@ class JaxRunner:
                 raise ValueError("softmax_grad requires probabilities and gradient arguments")
             probs = eval_array(args_expr[0])
             grad = eval_array(args_expr[1])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1)
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs) or -1
+            )
             return _jax_softmax_grad(probs, grad, axis).astype(self.default_dtype)
         if name == "sin":
             if not args_expr:
@@ -1108,9 +1127,9 @@ class JaxRunner:
             if isinstance(scale_value, str):
                 scale_value = self.tensors.get(scale_value)
             causal = bool(fn.kwargs.get("causal", False))
-            return _jax_attention(query, key, value, mask=mask_value, scale=scale_value, causal=causal).astype(
-                self.default_dtype
-            )
+            return _jax_attention(
+                query, key, value, mask=mask_value, scale=scale_value, causal=causal
+            ).astype(self.default_dtype)
         if name == "tucker_dense":
             if not args_expr:
                 raise ValueError("tucker_dense requires a tensor argument")
@@ -1127,7 +1146,9 @@ class JaxRunner:
                 threshold_value = fn.kwargs.get("threshold")
             rank_spec = _coerce_rank_spec(rank_value)
             threshold = _coerce_scalar(threshold_value)
-            return _jax_tucker_dense(base, rank=rank_spec, threshold=threshold, target_dtype=self.default_dtype)
+            return _jax_tucker_dense(
+                base, rank=rank_spec, threshold=threshold, target_dtype=self.default_dtype
+            )
         if name == "topk":
             arr = eval_array(args_expr[0])
             k = int(fn.kwargs.get("k", 5))

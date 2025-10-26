@@ -1,6 +1,6 @@
 import numpy as np
 
-from fuse import nn, logic, pgm
+from fuse import logic, nn, pgm
 from fuse.core.policies import InMemoryWeightStore, RuntimePolicies
 
 

@@ -11,7 +11,9 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - direct invocation fallback
     import importlib.util
 
-    _UTILS_SPEC = importlib.util.spec_from_file_location("_torch_utils", Path(__file__).with_name("_torch_utils.py"))
+    _UTILS_SPEC = importlib.util.spec_from_file_location(
+        "_torch_utils", Path(__file__).with_name("_torch_utils.py")
+    )
     _UTILS_MODULE = importlib.util.module_from_spec(_UTILS_SPEC)
     assert _UTILS_SPEC.loader is not None
     _UTILS_SPEC.loader.exec_module(_UTILS_MODULE)
@@ -68,7 +70,9 @@ export Loss
 """
 
 
-def _gradient_outputs(program_src: str, *, backend: str, export_grads: Iterable[str]) -> Dict[str, np.ndarray]:
+def _gradient_outputs(
+    program_src: str, *, backend: str, export_grads: Iterable[str]
+) -> Dict[str, np.ndarray]:
     program = Program(program_src)
     grad_program = generate_gradient_program(
         program,

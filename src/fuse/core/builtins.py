@@ -1,7 +1,6 @@
 import json
-import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -38,7 +37,9 @@ class SparseBoolTensor:
         return int(self.coords.shape[0])
 
     def __array__(self, dtype=None):
-        raise TypeError("SparseBoolTensor cannot be implicitly converted to dense; call to_dense() explicitly")
+        raise TypeError(
+            "SparseBoolTensor cannot be implicitly converted to dense; call to_dense() explicitly"
+        )
 
     def __repr__(self):
         return f"SparseBoolTensor(shape={self.shape}, nnz={self.nnz()})"
@@ -52,7 +53,9 @@ class BagOfWordsTensor:
     ``vocab`` so callers can recover the token ordering.
     """
 
-    def __init__(self, matrix: np.ndarray, vocab: Dict[str, int], vocab_path: Optional[Path] = None):
+    def __init__(
+        self, matrix: np.ndarray, vocab: Dict[str, int], vocab_path: Optional[Path] = None
+    ):
         self.matrix = np.asarray(matrix, dtype=np.int8)
         self.vocab = dict(vocab)
         self.vocab_path = vocab_path
@@ -154,8 +157,15 @@ def _is_topk_payload(value: Any) -> bool:
                 return False
     return True
 
-def step(x): return (x > 0).astype(np.int8)
-def relu(x): return np.maximum(0, x)
+
+def step(x):
+    return (x > 0).astype(np.int8)
+
+
+def relu(x):
+    return np.maximum(0, x)
+
+
 def sig(x, T=None, *, zero_tol: float = 1e-9):
     arr = np.asarray(x)
     if T is None:
@@ -167,8 +177,11 @@ def sig(x, T=None, *, zero_tol: float = 1e-9):
     if np.issubdtype(arr.dtype, np.floating):
         return result.astype(arr.dtype)
     return result.astype(np.float32)
+
+
 def gelu(x):
-    return 0.5*x*(1.0 + np.tanh(np.sqrt(2.0/np.pi)*(x + 0.044715*np.power(x,3))))
+    return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * np.power(x, 3))))
+
 
 def gelu_grad(x):
     c = np.sqrt(2.0 / np.pi)
@@ -177,12 +190,15 @@ def gelu_grad(x):
     tanh_inner = np.tanh(inner)
     sech2 = 1.0 - np.power(tanh_inner, 2)
     return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * np.power(x, 2)))
+
+
 def softmax(x, axis=-1):
     arr = np.asarray(x)
     arr = arr - np.max(arr, axis=axis, keepdims=True)
     e = np.exp(arr)
     s = np.sum(e, axis=axis, keepdims=True)
     return e / s
+
 
 def masked_softmax(x, mask=None, axis=-1, fill_value=None):
     arr = np.asarray(x)
@@ -202,6 +218,7 @@ def masked_softmax(x, mask=None, axis=-1, fill_value=None):
         result = np.where(mask_arr, result, 0.0)
     return result
 
+
 def softmax_grad(y, grad, axis=-1):
     y = np.asarray(y)
     grad = np.asarray(grad)
@@ -219,7 +236,9 @@ def _ensure_float_array(value):
     return arr
 
 
-def _normalize_tucker_ranks(rank: Optional[Union[int, Sequence[int]]], shape: Sequence[int]) -> List[int]:
+def _normalize_tucker_ranks(
+    rank: Optional[Union[int, Sequence[int]]], shape: Sequence[int]
+) -> List[int]:
     if rank is None:
         return [max(1, min(dim, int(np.ceil(np.sqrt(dim))))) for dim in shape]
     if isinstance(rank, (int, np.integer)):
@@ -227,7 +246,9 @@ def _normalize_tucker_ranks(rank: Optional[Union[int, Sequence[int]]], shape: Se
         return [max(1, min(dim, value)) for dim in shape]
     ranks = list(rank)
     if len(ranks) != len(shape):
-        raise ValueError(f"rank specification must match tensor order (got {len(ranks)} for {len(shape)})")
+        raise ValueError(
+            f"rank specification must match tensor order (got {len(ranks)} for {len(shape)})"
+        )
     normalized = []
     for dim, item in zip(shape, ranks):
         val = int(item)
@@ -249,7 +270,9 @@ def _mode_product_np(tensor: np.ndarray, matrix: np.ndarray, mode: int) -> np.nd
     return np.moveaxis(result.reshape(new_shape), 0, mode)
 
 
-def _tucker_decompose_np(arr: np.ndarray, ranks: Sequence[int], *, rng: Optional[np.random.Generator] = None) -> Tuple[np.ndarray, List[np.ndarray]]:
+def _tucker_decompose_np(
+    arr: np.ndarray, ranks: Sequence[int], *, rng: Optional[np.random.Generator] = None
+) -> Tuple[np.ndarray, List[np.ndarray]]:
     factors: List[np.ndarray] = []
     for mode in range(arr.ndim):
         unfolded = np.moveaxis(arr, mode, 0).reshape(arr.shape[mode], -1)
@@ -257,7 +280,9 @@ def _tucker_decompose_np(arr: np.ndarray, ranks: Sequence[int], *, rng: Optional
             u, s, _ = np.linalg.svd(unfolded, full_matrices=False)
         except np.linalg.LinAlgError:
             noise_source = rng.standard_normal if rng is not None else np.random.standard_normal
-            u, s, _ = np.linalg.svd(unfolded + 1e-6 * noise_source(unfolded.shape), full_matrices=False)
+            u, s, _ = np.linalg.svd(
+                unfolded + 1e-6 * noise_source(unfolded.shape), full_matrices=False
+            )
         r = min(ranks[mode], u.shape[1])
         factors.append(u[:, :r])
     core = arr
@@ -273,7 +298,9 @@ def _tucker_reconstruct_np(core: np.ndarray, factors: Sequence[np.ndarray]) -> n
     return result
 
 
-def tucker_dense(value, rank=None, threshold: float = 0.5, *, rng: Optional[np.random.Generator] = None):
+def tucker_dense(
+    value, rank=None, threshold: float = 0.5, *, rng: Optional[np.random.Generator] = None
+):
     """
     Approximate a sparse/high-order relation with a low-rank Tucker reconstruction
     and return a denoised dense tensor via step().
@@ -289,31 +316,38 @@ def tucker_dense(value, rank=None, threshold: float = 0.5, *, rng: Optional[np.r
         approx = _tucker_reconstruct_np(core, factors)
     approx = approx - float(threshold)
     return step(approx)
+
+
 def lnorm(x, axis=-1, eps=1e-5):
     mu = np.mean(x, axis=axis, keepdims=True)
-    var = np.mean((x-mu)**2, axis=axis, keepdims=True)
-    return (x-mu)/np.sqrt(var+eps)
+    var = np.mean((x - mu) ** 2, axis=axis, keepdims=True)
+    return (x - mu) / np.sqrt(var + eps)
+
 
 def layernorm(x, axis=-1, eps=1e-5):
     return lnorm(x, axis=axis, eps=eps)
+
 
 def rope(x, pos_axis_value):
     # Simple RoPE assuming last dim pairs (cos,sin) rotation by position index provided in pos_axis_value (int)
     # For demo: pos is an integer index per row; we assume caller broadcasts correctly.
     d = x.shape[-1]
-    half = d//2
+    half = d // 2
     cos = np.cos(np.arange(half))[None, ...]
     sin = np.sin(np.arange(half))[None, ...]
-    xr, xi = x[..., :half], x[..., half:half*2]
+    xr, xi = x[..., :half], x[..., half : half * 2]
     # naive rotation ignoring pos; suitable as placeholder
-    return np.concatenate([xr*cos - xi*sin, xr*sin + xi*cos], axis=-1)
+    return np.concatenate([xr * cos - xi * sin, xr * sin + xi * cos], axis=-1)
+
 
 def causal_mask(L):
-    m = np.tril(np.ones((L,L), dtype=np.int8))
+    m = np.tril(np.ones((L, L), dtype=np.int8))
     return m
 
-def const(val): 
+
+def const(val):
     return np.array(val)
+
 
 def _resolve_attention_scale(scale, dim_last):
     if scale is None:
@@ -322,6 +356,7 @@ def _resolve_attention_scale(scale, dim_last):
     if scale_arr.size == 1:
         return float(scale_arr.reshape(()))
     raise ValueError("attention scale must be a scalar")
+
 
 def attention(query, key, value, mask=None, scale=None, causal=False):
     q = np.asarray(query)
@@ -344,11 +379,14 @@ def attention(query, key, value, mask=None, scale=None, causal=False):
             mask_arr = np.logical_and(mask_arr, causal_mask)
     fill = None
     if mask_arr is not None:
-        fill = np.finfo(scores.dtype if np.issubdtype(scores.dtype, np.floating) else np.float32).min
+        fill = np.finfo(
+            scores.dtype if np.issubdtype(scores.dtype, np.floating) else np.float32
+        ).min
     weights = masked_softmax(scores, mask=mask_arr, axis=-1, fill_value=fill)
     return np.matmul(weights, v)
 
-def concat(*arrays, axis: Union[int, None]=None):
+
+def concat(*arrays, axis: Union[int, None] = None):
     # Allow passing a single iterable of arrays
     if len(arrays) == 1 and isinstance(arrays[0], (list, tuple)):
         arrays = tuple(arrays[0])
@@ -365,11 +403,14 @@ def concat(*arrays, axis: Union[int, None]=None):
         axis = -1
     return np.concatenate(arrays, axis=axis)
 
+
 def reduce_max(x, axis=None, keepdims=False):
     return np.max(x, axis=axis, keepdims=keepdims)
 
+
 def reduce_mean(x, axis=None, keepdims=False):
     return np.mean(x, axis=axis, keepdims=keepdims)
+
 
 def topk(arr, k=5, *, rng: Optional[np.random.Generator] = None):
     arr = np.asarray(arr)
@@ -395,6 +436,7 @@ def topk(arr, k=5, *, rng: Optional[np.random.Generator] = None):
     if single:
         return results[0]
     return results
+
 
 def _should_mmap_npz(file_path: Path, threshold: Optional[int]) -> bool:
     if threshold is None:
@@ -445,7 +487,9 @@ def read_tensor_from_file(
         return np.asarray(payload)
     if ext == ".safetensors":
         if _load_safetensors is None:
-            raise ImportError("Reading .safetensors requires the 'safetensors' package; install it to enable this loader.")
+            raise ImportError(
+                "Reading .safetensors requires the 'safetensors' package; install it to enable this loader."
+            )
         tensors = _load_safetensors(str(file_path))
         if len(tensors) == 1:
             return next(iter(tensors.values()))
@@ -482,6 +526,7 @@ def read_tensor_from_file(
         return SparseBoolTensor(coords_arr, shape)
     raise ValueError(f"Unsupported file type: {path}")
 
+
 def write_tensor_to_file(path: Union[str, Path], arr):
     target = Path(path)
     ext = target.suffix.lower()
@@ -496,15 +541,15 @@ def write_tensor_to_file(path: Union[str, Path], arr):
     if ext == ".jsonl":
         with target.open("w", encoding="utf-8") as handle:
             if _is_topk_payload(payload):
-                handle.write(json.dumps({"schema": "fuse.topk", "version": 1}, ensure_ascii=False) + "\n")
+                handle.write(
+                    json.dumps({"schema": "fuse.topk", "version": 1}, ensure_ascii=False) + "\n"
+                )
                 for row in payload:
                     normalised: List[Dict[str, float]] = []
                     for pair in row:
                         if not (isinstance(pair, (list, tuple)) and len(pair) == 2):
                             raise ValueError("Top-k rows must contain (index, value) pairs")
-                        normalised.append(
-                            {"index": int(pair[0]), "value": float(pair[1])}
-                        )
+                        normalised.append({"index": int(pair[0]), "value": float(pair[1])})
                     handle.write(json.dumps({"topk": normalised}, ensure_ascii=False) + "\n")
             else:
                 tensor = np.asarray(payload)
@@ -517,7 +562,7 @@ def write_tensor_to_file(path: Union[str, Path], arr):
                 )
                 handle.write(json.dumps({"value": tensor.tolist()}, ensure_ascii=False) + "\n")
         return
-    if ext in (".tsv",".csv"):
+    if ext in (".tsv", ".csv"):
         # write indices of 1s for Boolean tensors
         if isinstance(arr, SparseBoolTensor):
             idxs = arr.coords
@@ -526,6 +571,6 @@ def write_tensor_to_file(path: Union[str, Path], arr):
             idxs = np.argwhere(tensor != 0)
         with target.open("w", encoding="utf-8") as f:
             for r in idxs:
-                f.write("\t".join(str(int(x)) for x in r)+"\n")
+                f.write("\t".join(str(int(x)) for x in r) + "\n")
         return
     raise ValueError(f"Unsupported sink type: {target}")

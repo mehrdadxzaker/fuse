@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from fuse import Program, torch as fuse_torch, jax as fuse_jax
+from fuse import Program
+from fuse import jax as fuse_jax
+from fuse import torch as fuse_torch
 
 
 def _build_program_and_inputs():
@@ -36,7 +38,10 @@ Attn[p,h] = attention(Q[p,d], K[q,d], V[q,h], mask=Mask[p,q], scale=Scale)
 
 
 def _clone_inputs(base_inputs):
-    return {key: value.copy() if isinstance(value, np.ndarray) else value for key, value in base_inputs.items()}
+    return {
+        key: value.copy() if isinstance(value, np.ndarray) else value
+        for key, value in base_inputs.items()
+    }
 
 
 def _to_numpy(value):
@@ -59,6 +64,7 @@ def test_numpy_attention_reference():
 def test_torch_fastpaths_match_numpy():
     try:
         import torch
+
         torch.tensor([0.0]).detach().cpu().numpy()
     except Exception as exc:  # pragma: no cover - optional dependency
         pytest.skip(f"torch unavailable: {exc}")

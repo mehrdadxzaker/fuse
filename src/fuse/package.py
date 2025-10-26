@@ -7,13 +7,13 @@ import time
 import zipfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from .core.ir import Equation, FuncCall, IndexFunction, ProgramIR, TensorRef, Term
-from .core.program import Program
+from .core.ir import FuncCall, IndexFunction, ProgramIR, TensorRef, Term
 from .core.policies import ManifestWeightStore, RuntimePolicies
+from .core.program import Program
 
 
 def _serialize_slice(slice_spec: Optional[Any]) -> Optional[Dict[str, Any]]:
@@ -135,7 +135,9 @@ def _extract_kernel_stats(logs: Sequence[Mapping[str, Any]]) -> List[Dict[str, A
     return kernels
 
 
-def _index_kernels(kernels: Sequence[Mapping[str, Any]]) -> Dict[Tuple[Any, ...], Mapping[str, Any]]:
+def _index_kernels(
+    kernels: Sequence[Mapping[str, Any]],
+) -> Dict[Tuple[Any, ...], Mapping[str, Any]]:
     counter: Dict[Tuple[Any, ...], int] = defaultdict(int)
     mapping: Dict[Tuple[Any, ...], Mapping[str, Any]] = {}
     for kernel in kernels:
@@ -208,9 +210,7 @@ def _summarize_kernels(kernels: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     total_duration = float(
         sum((k.get("duration_ms") or 0.0) for k in kernels if k.get("duration_ms") is not None)
     )
-    durations_reported = sum(
-        1 for k in kernels if k.get("duration_ms") is not None
-    )
+    durations_reported = sum(1 for k in kernels if k.get("duration_ms") is not None)
     return {
         "kernel_count": len(kernels),
         "total_flops": total_flops,
@@ -272,8 +272,12 @@ def _render_explain_md(
                 name=entry.get("name"),
                 iter=entry.get("iteration"),
                 status=entry.get("status"),
-                cold=_format_duration(entry["cold"].get("duration_ms") if entry.get("cold") else None),
-                warm=_format_duration(entry["warm"].get("duration_ms") if entry.get("warm") else None),
+                cold=_format_duration(
+                    entry["cold"].get("duration_ms") if entry.get("cold") else None
+                ),
+                warm=_format_duration(
+                    entry["warm"].get("duration_ms") if entry.get("warm") else None
+                ),
                 flops=_format_engineering(entry.get("flops"), "FLOP"),
                 bytes=_format_engineering(entry.get("bytes_total"), "B"),
                 einsum=entry.get("einsum") or "",

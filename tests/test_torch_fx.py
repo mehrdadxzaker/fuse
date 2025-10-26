@@ -17,7 +17,7 @@ export Soft
 
 
 def test_torch_softmax_matches_numpy_and_fx_annotations():
-    torch = require_torch()
+    require_torch()
     prog = _softmax_program()
 
     inputs = {"Input": np.array([[0.2, -1.5, 0.3], [0.0, 0.5, -0.1]], dtype=np.float32)}

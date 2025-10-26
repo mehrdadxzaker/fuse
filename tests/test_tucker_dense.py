@@ -1,11 +1,15 @@
 import numpy as np
 import pytest
 
-from fuse import Program, torch as fuse_torch, jax as fuse_jax
+from fuse import Program
+from fuse import jax as fuse_jax
+from fuse import torch as fuse_torch
 from fuse.core.builtins import SparseBoolTensor
 
 
-def _make_sparse_relation(n: int, m: int, rank: int, density: float = 0.1, seed: int = 123) -> np.ndarray:
+def _make_sparse_relation(
+    n: int, m: int, rank: int, density: float = 0.1, seed: int = 123
+) -> np.ndarray:
     rng = np.random.default_rng(seed)
     left = rng.normal(size=(n, rank))
     right = rng.normal(size=(m, rank))
@@ -59,6 +63,7 @@ def test_tucker_dense_accepts_sparse_tensor():
 def test_tucker_dense_torch_matches_numpy():
     try:
         import torch
+
         torch.tensor([0], dtype=torch.float32).detach().cpu().numpy()
     except Exception as exc:  # pragma: no cover - optional dependency
         pytest.skip(f"torch unavailable: {exc}")
@@ -73,9 +78,7 @@ def test_tucker_dense_torch_matches_numpy():
     torch_out = torch_runner(inputs={"Rel": relation})["Dense"]
 
     torch_arr = (
-        torch_out.detach().cpu().numpy()
-        if hasattr(torch_out, "detach")
-        else np.asarray(torch_out)
+        torch_out.detach().cpu().numpy() if hasattr(torch_out, "detach") else np.asarray(torch_out)
     )
     np.testing.assert_array_equal(torch_arr, numpy_out)
 

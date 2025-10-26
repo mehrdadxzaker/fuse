@@ -170,9 +170,7 @@ export PosEnc
         ],
         dtype=np.float32,
     )
-    policies = RuntimePolicies(
-        weight_store=InMemoryWeightStore({"InputAngles": angles})
-    )
+    policies = RuntimePolicies(weight_store=InMemoryWeightStore({"InputAngles": angles}))
     runner = _compile(prog_src, backend=backend, policies=policies)
     outputs = runner()
 

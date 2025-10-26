@@ -8,23 +8,14 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
-from .ir import (
-    Equation,
-    FuncCall,
-    ProgramIR,
-    TensorRef,
-    Term,
-    IndexFunction,
-    equation_index_summary,
-    format_index_summary,
-)
 from .builtins import (
+    SparseBoolTensor,
+    attention,
+    causal_mask,
     concat,
     const,
-    causal_mask,
     gelu,
     gelu_grad,
-    attention,
     layernorm,
     lnorm,
     masked_softmax,
@@ -37,18 +28,27 @@ from .builtins import (
     softmax,
     softmax_grad,
     step,
-    tucker_dense,
     topk,
+    tucker_dense,
     write_tensor_to_file,
-    SparseBoolTensor,
+)
+from .ir import (
+    Equation,
+    FuncCall,
+    IndexFunction,
+    ProgramIR,
+    TensorRef,
+    Term,
+    equation_index_summary,
+    format_index_summary,
 )
 from .policies import RuntimePolicies
+from .stats import compute_einsum_stats
 from .temperature import (
     TemperatureSchedule,
     coerce_temperature_value,
     normalize_temperature_map,
 )
-from .stats import compute_einsum_stats
 
 # Map index tokens to letters for einsum (limited alphabet for demo)
 EINSUM_LABELS = list(string.ascii_letters)
@@ -78,7 +78,11 @@ class _StreamRingStore:
     def __init__(self, axes: Tuple[str, ...], window_sizes: Tuple[int, ...]):
         self.axes = axes
         self.window_sizes = tuple(max(1, int(w)) for w in window_sizes)
-        self.window_arr = np.array(self.window_sizes, dtype=np.int64) if self.axes else np.array([], dtype=np.int64)
+        self.window_arr = (
+            np.array(self.window_sizes, dtype=np.int64)
+            if self.axes
+            else np.array([], dtype=np.int64)
+        )
         self.initialized = False
         self.origin = np.zeros(len(self.axes), dtype=np.int64)
         self.max_pos = np.zeros(len(self.axes), dtype=np.int64)
@@ -129,13 +133,19 @@ class _StreamRingStore:
                 self.ring_to_global.pop(ring, None)
                 self.ring_to_value.pop(ring, None)
 
-        ring_key = tuple(int((offset[idx]) % self.window_sizes[idx]) for idx in range(len(self.axes)))
+        ring_key = tuple(
+            int((offset[idx]) % self.window_sizes[idx]) for idx in range(len(self.axes))
+        )
         existing_global = self.ring_to_global.get(ring_key)
         if existing_global is not None and existing_global != key:
             self.global_to_ring.pop(existing_global, None)
 
         existing_value = self.ring_to_value.get(ring_key)
-        if existing_value is None or existing_value.shape != value.shape or existing_value.dtype != value.dtype:
+        if (
+            existing_value is None
+            or existing_value.shape != value.shape
+            or existing_value.dtype != value.dtype
+        ):
             self.ring_to_value[ring_key] = np.array(value, copy=True)
         else:
             np.copyto(existing_value, value, casting="unsafe")
@@ -154,7 +164,9 @@ class _StreamRingStore:
             return self.ring_to_value.get(())
         if not self.initialized:
             return None
-        key = tuple(int(positions.get(axis, self.max_pos[idx])) for idx, axis in enumerate(self.axes))
+        key = tuple(
+            int(positions.get(axis, self.max_pos[idx])) for idx, axis in enumerate(self.axes)
+        )
         return self.get(key)
 
     def prune_before(self, minimums: Tuple[int, ...]) -> None:
@@ -172,6 +184,8 @@ class _StreamRingStore:
         if not self.axes or not self.initialized:
             return {}
         return {axis: int(self.max_pos[idx]) for idx, axis in enumerate(self.axes)}
+
+
 def _normalize_device_spec(spec: str) -> str:
     device = (spec or "").strip()
     if not device:
@@ -203,17 +217,18 @@ class ExecutionConfig:
     * ``zero_copy`` enables zero-copy host handoffs whenever possible to avoid
       unnecessary host ↔ device transfers in hybrid execution paths.
     """
-    mode: str = "single"           # "single" | "fixpoint" | "demand"
+
+    mode: str = "single"  # "single" | "fixpoint" | "demand"
     max_iters: int = 32
     tol: float = 1e-6
-    chaining: str = "forward"      # "forward" | "backward"
+    chaining: str = "forward"  # "forward" | "backward"
     explain_timings: bool = True
     projection_strategy: str = "exact"  # "exact" | "monte_carlo"
     projection_samples: Optional[int] = None
     projection_seed: Optional[int] = None
     temperatures: Optional[Dict[str, TemperatureSchedule]] = None
-    precision: str = "fp32"        # "fp32" | "bf16" | "fp16" | "auto"
-    device: str = "auto"           # "auto" | "cpu" | "cuda" | "mps" | "cuda:N"
+    precision: str = "fp32"  # "fp32" | "bf16" | "fp16" | "auto"
+    device: str = "auto"  # "auto" | "cpu" | "cuda" | "mps" | "cuda:N"
     zero_copy: bool = True
     jax_enable_xla_cache: bool = False
     jax_cache_dir: Optional[str] = None
@@ -372,9 +387,7 @@ class NumpyRunner:
             kind = entry.get("kind")
             if kind == "source":
                 src = entry["source"]
-                lines.append(
-                    f"[src] {src['name']} <- {src['path']} shape={src['shape']}"
-                )
+                lines.append(f"[src] {src['name']} <- {src['path']} shape={src['shape']}")
             elif kind == "equation":
                 eq = entry["equation"]
                 details: List[str] = []
@@ -400,20 +413,12 @@ class NumpyRunner:
                     details.append(f"idx[{table}]")
                 status = eq["status"]
                 iteration = eq["iteration"]
-                timing = (
-                    f" {eq['duration_ms']:.3f}ms"
-                    if eq.get("duration_ms") is not None
-                    else ""
-                )
+                timing = f" {eq['duration_ms']:.3f}ms" if eq.get("duration_ms") is not None else ""
                 note = f" {' '.join(details)}" if details else ""
-                lines.append(
-                    f"[iter {iteration:02d}] {eq['name']} {status}{timing}{note}"
-                )
+                lines.append(f"[iter {iteration:02d}] {eq['name']} {status}{timing}{note}")
             elif kind == "sink":
                 sk = entry["sink"]
-                lines.append(
-                    f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})"
-                )
+                lines.append(f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})")
         return "\n".join(lines)
 
     # Internal helpers ----------------------------------------------------------
@@ -533,12 +538,16 @@ class NumpyRunner:
         self.tensor_stream_axes[ref.name] = axes
         return axes
 
-    def _stream_key_for_ref(self, ref: TensorRef, base_positions: Dict[str, int]) -> Tuple[int, ...]:
+    def _stream_key_for_ref(
+        self, ref: TensorRef, base_positions: Dict[str, int]
+    ) -> Tuple[int, ...]:
         axes = self._stream_axes_for_ref(ref)
         key: List[int] = []
         for axis in axes:
             if axis not in ref.rolling:
-                raise ValueError(f"Streaming axis '{axis}' missing in reference to tensor '{ref.name}'")
+                raise ValueError(
+                    f"Streaming axis '{axis}' missing in reference to tensor '{ref.name}'"
+                )
             offset = ref.rolling[axis]
             base = base_positions.get(axis, 0)
             key.append(base + offset)
@@ -567,7 +576,9 @@ class NumpyRunner:
         rolling = {axis: 0 for axis in stream_axes}
         ref = TensorRef(name=name, indices=indices, rolling=rolling)
         normalized = self._normalize_boolean(name, value)
-        self._store_stream_value(ref, normalized, base_positions=self._stream_base, update_max=False)
+        self._store_stream_value(
+            ref, normalized, base_positions=self._stream_base, update_max=False
+        )
 
     def _store_stream_value(
         self,
@@ -596,9 +607,7 @@ class NumpyRunner:
         key = self._stream_key_for_ref(ref, self._stream_base)
         arr = store.get(key)
         if arr is None:
-            raise KeyError(
-                f"Streaming tensor '{ref.name}' missing value for indices {key}"
-            )
+            raise KeyError(f"Streaming tensor '{ref.name}' missing value for indices {key}")
         return arr
 
     def _assign_stream(self, ref: TensorRef, value: np.ndarray, *, tol: float) -> bool:
@@ -647,7 +656,6 @@ class NumpyRunner:
         if not store:
             return None
         return store.latest(self.stream_positions)
-
 
     # Source / sink handling ----------------------------------------------------
     def _run_sources(self):
@@ -724,7 +732,9 @@ class NumpyRunner:
     def _run_single_pass(self, cfg: ExecutionConfig):
         groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
         for name, eqs in groups:
-            self._evaluate_group(name, eqs, iteration=0, tol=cfg.tol, capture_timing=cfg.explain_timings)
+            self._evaluate_group(
+                name, eqs, iteration=0, tol=cfg.tol, capture_timing=cfg.explain_timings
+            )
 
     def _run_fixpoint(self, cfg: ExecutionConfig):
         groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
@@ -764,7 +774,9 @@ class NumpyRunner:
         had_prev = lhs_name in self.tensors
         running_total: Optional[np.ndarray] = None
         self._active_lhs = lhs_name
-        self._active_prev_value = None if (lhs_ref.rolling or prev_value is None) else _to_numpy_array(prev_value)
+        self._active_prev_value = (
+            None if (lhs_ref.rolling or prev_value is None) else _to_numpy_array(prev_value)
+        )
         self._active_equation_temperature = group_temperature
 
         try:
@@ -789,10 +801,14 @@ class NumpyRunner:
                     durations.append(None)
                 metas.append(meta)
                 if self._is_boolean_tensor(lhs_name):
-                    running_total = value_arr if running_total is None else np.maximum(running_total, value_arr)
+                    running_total = (
+                        value_arr if running_total is None else np.maximum(running_total, value_arr)
+                    )
                     self.tensors[lhs_name] = running_total
                 else:
-                    running_total = value_arr if running_total is None else running_total + value_arr
+                    running_total = (
+                        value_arr if running_total is None else running_total + value_arr
+                    )
                     self.tensors[lhs_name] = running_total
         finally:
             self._active_lhs = None
@@ -813,8 +829,10 @@ class NumpyRunner:
         changed = self._assign(lhs_ref, total, tol=tol)
 
         for idx, (eq, meta) in enumerate(zip(equations, metas)):
-            status = "update" if (changed and idx == len(equations) - 1) else (
-                "unchanged" if (not changed and idx == len(equations) - 1) else "contrib"
+            status = (
+                "update"
+                if (changed and idx == len(equations) - 1)
+                else ("unchanged" if (not changed and idx == len(equations) - 1) else "contrib")
             )
             self._log_equation(
                 eq,
@@ -964,7 +982,7 @@ class NumpyRunner:
                     if self.policies.weight_store is not None:
                         try:
                             resolved = self.policies.weight_store.resolve(expr.name)
-                        except KeyError as exc:
+                        except KeyError:
                             resolved = None
                 if resolved is not None:
                     arr_np = self.policies.materialize_weight(
@@ -1071,9 +1089,7 @@ class NumpyRunner:
     ) -> np.ndarray:
         length = axis_lengths.get(fn.axis)
         if length is None:
-            raise ValueError(
-                f"Axis '{fn.axis}' length unknown for index function '{fn.name}'"
-            )
+            raise ValueError(f"Axis '{fn.axis}' length unknown for index function '{fn.name}'")
         indices = np.arange(length, dtype=np.int64)
         if fn.name == "even":
             mask = (indices % 2) == 0
@@ -1127,7 +1143,9 @@ class NumpyRunner:
             extended_lhs = self._build_extended_lhs(lhs, projected)
             extended_equation, _, extended_order = _normalized_einsum(term, extended_lhs)
 
-        def _array_shapes_and_sizes(arrays: Sequence[np.ndarray]) -> Tuple[List[Tuple[int, ...]], List[int]]:
+        def _array_shapes_and_sizes(
+            arrays: Sequence[np.ndarray],
+        ) -> Tuple[List[Tuple[int, ...]], List[int]]:
             shapes: List[Tuple[int, ...]] = []
             itemsizes: List[int] = []
             for arr in arrays:
@@ -1341,16 +1359,22 @@ class NumpyRunner:
             return gelu_grad(eval_arg(args_expr[0]))
         if name == "lnorm":
             arr = eval_arg(args_expr[0])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             return lnorm(arr, axis=axis)
         if name in {"layernorm", "layer_norm"}:
             arr = eval_arg(args_expr[0])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             eps = float(fn.kwargs.get("eps", 1e-5))
             return layernorm(arr, axis=axis, eps=eps)
         if name == "softmax":
             arr = eval_arg(args_expr[0])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             return softmax(arr, axis=axis)
         if name == "masked_softmax":
             arr = eval_arg(args_expr[0])
@@ -1360,7 +1384,9 @@ class NumpyRunner:
             elif "mask" in fn.kwargs:
                 mask_expr = fn.kwargs.get("mask")
             mask_value = self._eval(mask_expr, lhs=lhs) if mask_expr is not None else None
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             fill_value = fn.kwargs.get("fill") if "fill" in fn.kwargs else None
             return masked_softmax(arr, mask=mask_value, axis=axis, fill_value=fill_value)
         if name == "softmax_grad":
@@ -1368,7 +1394,9 @@ class NumpyRunner:
                 raise ValueError("softmax_grad requires probabilities and gradient arguments")
             probs = eval_arg(args_expr[0])
             grad = eval_arg(args_expr[1])
-            axis = self._axis_from_spec(fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs))
+            axis = self._axis_from_spec(
+                fn.kwargs.get("axis"), args_expr[0], lhs, default=self._dotted_axis(lhs)
+            )
             return softmax_grad(probs, grad, axis=axis)
         if name == "sin":
             if not args_expr:
@@ -1527,7 +1555,9 @@ class DemandNumpyRunner(NumpyRunner):
             cfg = replace(cfg, mode="demand")
         super().__init__(ir, config=cfg, policies=policies)
         if self.stream_enabled:
-            raise NotImplementedError("Demand-driven execution does not support streaming programs yet")
+            raise NotImplementedError(
+                "Demand-driven execution does not support streaming programs yet"
+            )
         self._group_lookup: Dict[str, List[Equation]] = {name: eqs for name, eqs in self._groups}
         self._sources_lookup: Dict[str, Equation] = {src.lhs.name: src for src in self._sources}
         self._lhs_lookup: Dict[str, TensorRef] = {}
@@ -1538,9 +1568,9 @@ class DemandNumpyRunner(NumpyRunner):
             self._lhs_lookup[src.lhs.name] = src.lhs
         self._dependencies: Dict[str, Set[str]] = self._build_group_dependencies()
         cache_targets = set(self._lhs_lookup.keys())
-        self._slice_cache: Dict[str, Dict[Tuple[Tuple[Optional[int], Optional[int], Optional[int]], ...], np.ndarray]] = {
-            name: {} for name in cache_targets
-        }
+        self._slice_cache: Dict[
+            str, Dict[Tuple[Tuple[Optional[int], Optional[int], Optional[int]], ...], np.ndarray]
+        ] = {name: {} for name in cache_targets}
         self._computed_groups: Set[str] = set()
         self._materialized_sources: Set[str] = set()
         self._configure_for_call(inputs=None, config=cfg, policies=policies, force_reset=True)
@@ -1753,7 +1783,7 @@ class DemandNumpyRunner(NumpyRunner):
         indices = [idx for idx in lhs.indices if idx not in lhs.rolling]
         normalized: List[slice] = []
         selectors = selectors or {}
-        for axis, idx_name in enumerate(indices):
+        for _axis, idx_name in enumerate(indices):
             if idx_name in selectors:
                 value = selectors[idx_name]
                 if isinstance(value, slice):
@@ -1786,6 +1816,7 @@ def _first_tensor_ref(expr: Any) -> Optional[TensorRef]:
             return _first_tensor_ref(arg)
     return None
 
+
 def _collect_tensor_names(expr: Any) -> Set[str]:
     names: Set[str] = set()
     if isinstance(expr, TensorRef):
@@ -1808,8 +1839,12 @@ def _collect_tensor_names(expr: Any) -> Set[str]:
         return names
     return names
 
-def _selector_key(selector: Tuple[slice, ...]) -> Tuple[Tuple[Optional[int], Optional[int], Optional[int]], ...]:
+
+def _selector_key(
+    selector: Tuple[slice, ...],
+) -> Tuple[Tuple[Optional[int], Optional[int], Optional[int]], ...]:
     return tuple((sl.start, sl.stop, sl.step) for sl in selector)
+
 
 def _axes_to_squeeze(selector: Tuple[slice, ...]) -> Tuple[int, ...]:
     axes: List[int] = []
@@ -1826,6 +1861,7 @@ def _axes_to_squeeze(selector: Tuple[slice, ...]) -> Tuple[int, ...]:
         if stop - start == 1:
             axes.append(axis)
     return tuple(axes)
+
 
 def _shift_axis(array: np.ndarray, axis: int, offset: int) -> np.ndarray:
     if offset == 0:

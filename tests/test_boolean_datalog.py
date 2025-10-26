@@ -14,14 +14,13 @@ def _write_facts(path, rows):
 
 
 def _reference_closure(parent_edges, sister_edges):
-    parents = set(parent_edges)
     ancestors = set(parent_edges)
     changed = True
     while changed:
         changed = False
         new_edges = set()
-        for (x, y) in parent_edges:
-            for (mid, z) in ancestors:
+        for x, y in parent_edges:
+            for mid, z in ancestors:
                 if y == mid and (x, z) not in ancestors:
                     new_edges.add((x, z))
         if new_edges:

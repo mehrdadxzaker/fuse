@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fuse import Program, RuntimePolicies, InMemoryWeightStore
+from fuse import InMemoryWeightStore, Program, RuntimePolicies
 from fuse.interop import (
     from_pytorch,
     to_onnx,

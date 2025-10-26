@@ -4,7 +4,6 @@ import pytest
 
 from fuse import Program
 
-
 SHAPE_ERROR_CASES = [
     (
         "missing_axis_in_simple_assignment",
@@ -18,7 +17,10 @@ SHAPE_ERROR_CASES = [
         """
         Out[] = In[i]
         """,
-        ["Out: RHS joins on {i}, projects {i}, but LHS expects {∅}", "unmatched RHS indices i from In"],
+        [
+            "Out: RHS joins on {i}, projects {i}, but LHS expects {∅}",
+            "unmatched RHS indices i from In",
+        ],
     ),
     (
         "missing_second_lhs_axis",
@@ -32,7 +34,10 @@ SHAPE_ERROR_CASES = [
         """
         Out[i] = In[i] Extra[k]
         """,
-        ["Out: RHS joins on {i, k}, projects {k}, but LHS expects {i}", "unmatched RHS indices k from Extra"],
+        [
+            "Out: RHS joins on {i, k}, projects {k}, but LHS expects {i}",
+            "unmatched RHS indices k from Extra",
+        ],
     ),
     (
         "two_stray_axes",
@@ -53,7 +58,10 @@ SHAPE_ERROR_CASES = [
         """
         Out[i] = In[i] Mixed[i,k]
         """,
-        ["Out: RHS joins on {i, k}, projects {k}, but LHS expects {i}", "unmatched RHS indices k from Mixed"],
+        [
+            "Out: RHS joins on {i, k}, projects {k}, but LHS expects {i}",
+            "unmatched RHS indices k from Mixed",
+        ],
     ),
     (
         "single_stray_in_multi_factor_product",
@@ -67,14 +75,20 @@ SHAPE_ERROR_CASES = [
         """
         Out[i,j] = Left[i,k] Right[k,l]
         """,
-        ["Out: RHS joins on {i, k, l}, projects {k, l}, but LHS expects {i, j}", "missing indices j"],
+        [
+            "Out: RHS joins on {i, k, l}, projects {k, l}, but LHS expects {i, j}",
+            "missing indices j",
+        ],
     ),
     (
         "stray_axis_with_index_function",
         """
         Out[i] = In[i] Even(j)
         """,
-        ["Out: RHS joins on {i, j}, projects {j}, but LHS expects {i}", "unmatched RHS indices j from even"],
+        [
+            "Out: RHS joins on {i, j}, projects {j}, but LHS expects {i}",
+            "unmatched RHS indices j from even",
+        ],
     ),
     (
         "missing_axis_with_index_function",
@@ -109,7 +123,11 @@ SHAPE_ERROR_CASES = [
         """
         Hidden[i,*t+1] = Hidden[i,*t] Extra[k]
         """,
-        ["Hidden: RHS joins on {i, k}, projects {k}, but LHS expects {i, t}", "missing indices t", "Extra"],
+        [
+            "Hidden: RHS joins on {i, k}, projects {k}, but LHS expects {i, t}",
+            "missing indices t",
+            "Extra",
+        ],
     ),
     (
         "slice_axis_missing_from_lhs",
@@ -144,7 +162,10 @@ SHAPE_ERROR_CASES = [
         """
         Out[i,j] = First[i,j] Second[j,k] Third[k,l]
         """,
-        ["Out: RHS joins on {i, j, k, l}, projects {k, l}, but LHS expects {i, j}", "unmatched RHS indices l from Third"],
+        [
+            "Out: RHS joins on {i, j, k, l}, projects {k, l}, but LHS expects {i, j}",
+            "unmatched RHS indices l from Third",
+        ],
     ),
 ]
 

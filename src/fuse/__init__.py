@@ -1,11 +1,15 @@
 try:
-    from importlib.metadata import PackageNotFoundError, version as _load_version
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _load_version
 except ImportError:  # pragma: no cover
     from importlib_metadata import (  # type: ignore
         PackageNotFoundError,
+    )
+    from importlib_metadata import (
         version as _load_version,
     )
 
+from . import logic, nn, pgm
 from .core.cache import CacheManager
 from .core.evaluator_numpy import ExecutionConfig
 from .core.policies import (
@@ -23,6 +27,14 @@ from .core.temperature import (
     PiecewiseSchedule,
     make_schedule,
 )
+from .inference.grad_builder import GradientProgram, generate_gradient_program
+from .inference.tree_program import (
+    Factor,
+    TreeFactorGraph,
+    TreeProgram,
+    Variable,
+    conditional_probability,
+)
 from .interop import (
     from_pytorch,
     from_safetensors,
@@ -30,16 +42,7 @@ from .interop import (
     to_torchscript,
 )
 from .package import build_package
-from .inference.tree_program import (
-    TreeFactorGraph,
-    TreeProgram,
-    Variable,
-    Factor,
-    conditional_probability,
-)
-from .inference.grad_builder import generate_gradient_program, GradientProgram
 from .training import gradients_for_program
-from . import nn, logic, pgm
 
 try:
     __version__ = _load_version("fuse-ai")

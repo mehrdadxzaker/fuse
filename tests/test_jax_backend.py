@@ -3,7 +3,6 @@ import pytest
 
 from fuse import ExecutionConfig, Program
 
-
 jax = pytest.importorskip("jax", reason="JAX backend not available")
 
 

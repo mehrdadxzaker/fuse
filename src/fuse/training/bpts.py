@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
 from ..core.evaluator_numpy import ExecutionConfig
-from ..core.program import Program
 from ..core.policies import RuntimePolicies
+from ..core.program import Program
 from ..inference.grad_builder import generate_gradient_program
 
 

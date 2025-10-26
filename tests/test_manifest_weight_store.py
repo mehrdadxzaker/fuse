@@ -7,6 +7,7 @@ from fuse.core.policies import ManifestWeightStore, RuntimePolicies
 def _quantize(values: np.ndarray, scale: np.ndarray, zero_point: np.ndarray) -> np.ndarray:
     return np.round(values / scale + zero_point).astype(np.int8)
 
+
 def test_manifest_weight_store_memmaps_numpy(tmp_path):
     values = np.arange(8, dtype=np.float32)
     np.save(tmp_path / "vector.npy", values)

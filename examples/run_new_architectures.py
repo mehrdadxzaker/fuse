@@ -5,7 +5,6 @@ from typing import Optional
 
 from fuse import Program
 
-
 ARCHITECTURES = [
     ("04_mlp", ["Probs"]),
     ("05_transformer_block", ["Final"]),
@@ -44,15 +43,31 @@ def run_example(name: str, exports, backend: str, cache_dir: Optional[str]):
     program = Program(eqs_path.read_text())
     runner = program.compile(backend=backend, cache_dir=cache_dir)
     outputs = runner()
-    summary = {key: None if outputs.get(key) is None else tuple(outputs[key].shape) if hasattr(outputs[key], "shape") else "scalar" for key in exports}
+    summary = {
+        key: None
+        if outputs.get(key) is None
+        else tuple(outputs[key].shape)
+        if hasattr(outputs[key], "shape")
+        else "scalar"
+        for key in exports
+    }
     print(f"{name}: {summary}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run the DSL architecture examples.")
-    parser.add_argument("--backend", default="numpy", choices=["numpy", "torch", "jax"], help="Backend to use when compiling programs.")
-    parser.add_argument("--cache-dir", default=None, help="Optional cache directory for compiled artifacts.")
-    parser.add_argument("--only", nargs="*", help="Subset of example prefixes to run (e.g. 04_mlp).")
+    parser.add_argument(
+        "--backend",
+        default="numpy",
+        choices=["numpy", "torch", "jax"],
+        help="Backend to use when compiling programs.",
+    )
+    parser.add_argument(
+        "--cache-dir", default=None, help="Optional cache directory for compiled artifacts."
+    )
+    parser.add_argument(
+        "--only", nargs="*", help="Subset of example prefixes to run (e.g. 04_mlp)."
+    )
     args = parser.parse_args()
 
     selected = ARCHITECTURES

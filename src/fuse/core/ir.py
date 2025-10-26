@@ -1,19 +1,23 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 
 try:  # pragma: no cover - numpy optional at type-check time
     import numpy as _np
 except Exception:  # pragma: no cover - consumer may not have numpy when only parsing
     _np = None
 
+
 @dataclass
 class TensorRef:
     name: str
-    indices: List[str]             # in order as written
-    dotted_axes: List[str] = field(default_factory=list)  # indices marked with '.' in LHS (for softmax/lnorm)
+    indices: List[str]  # in order as written
+    dotted_axes: List[str] = field(
+        default_factory=list
+    )  # indices marked with '.' in LHS (for softmax/lnorm)
     rolling: Dict[str, int] = field(default_factory=dict)  # streaming indices with offsets
     index_specs: List["IndexSpec"] = field(default_factory=list)
     is_paren: bool = False
+
 
 @dataclass
 class SliceSpec:
@@ -21,43 +25,50 @@ class SliceSpec:
     stop: Optional[int] = None
     step: Optional[int] = None
 
+
 @dataclass
 class IndexSpec:
     axis: str
     offset: int = 0
     slice: Optional[SliceSpec] = None
 
+
 @dataclass
 class Term:
     # A product of factors (all TensorRef for now) compiled into einsum
     factors: List[Any]
 
+
 @dataclass
 class FuncCall:
     name: str
-    arg: Any                       # could be Term or TensorRef or FuncCall
+    arg: Any  # could be Term or TensorRef or FuncCall
     kwargs: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class IndexFunction:
     name: str
     axis: str
 
+
 Expr = Any  # Term | FuncCall | TensorRef | IndexFunction
+
 
 @dataclass
 class Equation:
     lhs: TensorRef
-    rhs: Expr                      # sums handled as multiple equations with same LHS (pre-split)
-    projection: str = "sum"        # "sum" | "max" | "mean" for projected indices (syntactic sugar)
-    src_file: Optional[str] = None    # if reading from file
-    sink_file: Optional[str] = None   # if writing to file
+    rhs: Expr  # sums handled as multiple equations with same LHS (pre-split)
+    projection: str = "sum"  # "sum" | "max" | "mean" for projected indices (syntactic sugar)
+    src_file: Optional[str] = None  # if reading from file
+    sink_file: Optional[str] = None  # if writing to file
     is_source: bool = False
     is_sink: bool = False
     export: bool = False
     line: Optional[int] = None
     column: Optional[int] = None
     source: Optional[str] = None
+
 
 @dataclass
 class ProgramIR:

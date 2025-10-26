@@ -2,9 +2,9 @@ import numpy as np
 
 from fuse import (
     ExecutionConfig,
+    Factor,
     TreeFactorGraph,
     Variable,
-    Factor,
     conditional_probability,
 )
 from fuse.inference.tree_program import brute_force_joint

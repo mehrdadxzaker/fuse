@@ -11,8 +11,8 @@ import numpy as np
 
 if TYPE_CHECKING:
     from .evaluator_numpy import ExecutionConfig
-from .policies import RuntimePolicies
 from .exceptions import CacheError
+from .policies import RuntimePolicies
 
 CACHE_VERSION = "2"
 
@@ -135,7 +135,9 @@ def _serialize_payload(payload: Any) -> Tuple[Dict[str, np.ndarray], Optional[Di
             arrays[dataset] = _ensure_serializable_array(np.asarray(value))
             datasets.append(dataset)
         return arrays, {"type": "sequence", "datasets": datasets}
-    raise CacheError("Cache payload must be bytes, numpy arrays, or JSON/array compatible structures")
+    raise CacheError(
+        "Cache payload must be bytes, numpy arrays, or JSON/array compatible structures"
+    )
 
 
 def _deserialize_payload(arrays: Dict[str, np.ndarray], meta: Dict[str, Any]) -> Any:
@@ -304,7 +306,9 @@ def cache_fingerprint(
 
 
 def cache_key_from_fingerprint(fingerprint: Dict[str, Any]) -> str:
-    canonical = json.dumps(fingerprint, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    canonical = json.dumps(fingerprint, sort_keys=True, separators=(",", ":"), default=str).encode(
+        "utf-8"
+    )
     return hashlib.sha256(canonical).hexdigest()
 
 

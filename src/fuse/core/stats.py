@@ -70,7 +70,11 @@ def compute_einsum_stats(
         operand_shapes,
     )
 
-    output_size = _prod(dims[label] for label in output_labels) if output_labels else max(_prod(result_shape), 1)
+    output_size = (
+        _prod(dims[label] for label in output_labels)
+        if output_labels
+        else max(_prod(result_shape), 1)
+    )
     contract_size = _prod(dims[label] for label in contracted_labels) if contracted_labels else 1
 
     if contracted_labels:
