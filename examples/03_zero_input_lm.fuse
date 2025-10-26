@@ -1,0 +1,13 @@
+\
+# Zero-input: program declares its own sources and sinks
+
+X[p,t]       = "data/prompt.txt"    # text -> Boolean (pos×token) matrix
+Emb[t,d]     = "ckpt/emb.npy"
+WO[t,d]      = "ckpt/lm_head.npy"
+
+EmbX[p,d]    = X(p, t) Emb[t,d]
+Logits[p,t]  = WO[t,d] EmbX[p,d]
+Y[p,t.]      = softmax(Logits[p,t])
+
+"runs/topk.jsonl" = topk(Y[p,t], k=5)
+export Y

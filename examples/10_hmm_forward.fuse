@@ -1,0 +1,22 @@
+# Hidden Markov Model forward recursion for two observations
+
+Prior[s]         = const([0.6,0.4])
+Trans[s,s']     = const([[0.7,0.3], [0.4,0.6]])
+Emit[s,o]       = const([[0.9,0.1], [0.2,0.8]])
+Obs[t,o]        = const([[1,0], [0,1]])
+
+Emit0[s]         = Emit[s,o] Obs[0,o]
+Alpha0[s]        = Prior[s] Emit0[s]
+
+Emit1[s]         = Emit[s,o] Obs[1,o]
+Message1[s]      = Alpha0[s'] Trans[s',s]
+Alpha1[s]        = Message1[s] Emit1[s]
+
+Select0[t]       = const([1,0])
+Select1[t]       = const([0,1])
+
+Alpha[t,s]      = Select0[t] Alpha0[s] + Select1[t] Alpha1[s]
+Normalized[t,s] = softmax(Alpha[t,s])
+
+"runs/hmm_alpha.npz" = Alpha[t,s]
+export Normalized

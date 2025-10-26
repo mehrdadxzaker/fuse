@@ -1,0 +1,24 @@
+# Factor graph style probabilistic joins and marginalization
+
+UnaryX[x]        = const([0.6,0.4])
+UnaryY[y]        = const([0.5,0.5])
+PairXY[x,y]     = const([[0.9,0.1], [0.2,0.8]])
+PairYZ[y,z]     = const([[0.7,0.3], [0.4,0.6]])
+ProjectX[x]      = const([1,1])
+ProjectY[y]      = const([1,1])
+ProjectZ[z]      = const([1,1])
+
+Joint[x,y,z]   = UnaryX[x] UnaryY[y] PairXY[x,y] PairYZ[y,z]
+
+MarginalX[x]     = Joint[x,y,z] ProjectY[y] ProjectZ[z]
+MarginalY[y]     = Joint[x,y,z] ProjectX[x] ProjectZ[z]
+MarginalZ[z]     = Joint[x,y,z] ProjectX[x] ProjectY[y]
+
+ProbX[x]         = softmax(MarginalX[x])
+ProbY[y]         = softmax(MarginalY[y])
+ProbZ[z]         = softmax(MarginalZ[z])
+
+"runs/factor_graph_joint.npz" = Joint[x,y,z]
+export ProbX
+export ProbY
+export ProbZ

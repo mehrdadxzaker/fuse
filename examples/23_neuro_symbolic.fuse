@@ -1,0 +1,15 @@
+# Neural + symbolic hybrid reasoning
+
+NeuralEmb[x,d]  = const([[0.7,0.1], [0.2,0.8], [0.5,0.4]])
+TaskWeight[d]    = const([0.6,-0.3])
+LogicFact[x,y]  = const([[1,0,1], [0,1,0], [0,0,1]])
+RuleMask[y]      = const([1,0,1])
+
+NeuralScore[x]   = NeuralEmb[x,d] TaskWeight[d]
+LogicScore[x]    = LogicFact[x,y] RuleMask[y]
+
+Combined[x]      = NeuralScore[x] + LogicScore[x]
+Decision[x]      = step(Combined[x])
+
+"runs/neuro_symbolic_scores.npz" = Combined[x]
+export Decision

@@ -1,0 +1,25 @@
+# Simple two-step RNN unrolled recurrence
+
+Input[t,d]      = const([[0.6,-0.2], [0.1,0.5]])
+WX[h,d]         = const([[0.3,0.7], [-0.4,0.2]])
+WH[h,h']        = const([[0.2,0.5], [0.1,0.3]])
+Bias[h]          = const([0.0,0.1])
+HiddenInit[h]    = const([0.0,0.0])
+
+Input0[h]        = WX[h,d] Input[0,d]
+Hidden1Linear[h] = Input0[h] + WH[h,h'] HiddenInit[h']
+Hidden1Shift[h]  = Hidden1Linear[h] + Bias[h]
+Hidden1[h]       = relu(Hidden1Shift[h])
+
+Input1[h]        = WX[h,d] Input[1,d]
+Hidden2Linear[h] = Input1[h] + WH[h,h'] Hidden1[h']
+Hidden2Shift[h]  = Hidden2Linear[h] + Bias[h]
+Hidden2[h]       = relu(Hidden2Shift[h])
+
+Select0[t]       = const([1,0])
+Select1[t]       = const([0,1])
+
+Hidden[t,h]     = Select0[t] Hidden1[h] + Select1[t] Hidden2[h]
+
+"runs/rnn_hidden.npz" = Hidden[t,h]
+export Hidden

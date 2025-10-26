@@ -1,0 +1,16 @@
+# Graph Neural Network message passing over adjacency
+
+Adj[u,v]        = const([[0,1,1,0], [1,0,1,0], [1,1,0,1], [0,0,1,0]])
+Feat[v,d]       = const([[0.6,0.2], [0.1,0.8], [0.4,0.5], [0.3,0.7]])
+Self[u,d]       = const([[0.2,0.1], [0.3,0.2], [0.1,0.4], [0.0,0.3]])
+Weight[d,d']    = const([[0.5,-0.2,0.3], [0.1,0.4,-0.1]])
+Bias[d']         = const([0.0,0.1,-0.2])
+
+Aggregate[u,d]  = Adj[u,v] Feat[v,d]
+Combined[u,d]   = Aggregate[u,d] + Self[u,d]
+Projected[u,d'] = Weight[d,d'] Combined[u,d]
+Shifted[u,d']   = Projected[u,d'] + Bias[d']
+Emb[u,d']       = relu(Shifted[u,d'])
+
+"runs/gnn_embeddings.npz" = Emb[u,d']
+export Emb

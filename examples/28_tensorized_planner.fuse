@@ -1,0 +1,24 @@
+# Tensorized planner (STRIPS-style) with Boolean joins
+
+State0[f]        = const([1,0,1,0])
+Pre[a,f]        = const([[1,0,0,0], [0,1,0,1]])
+AddEff[a,f]     = const([[0,1,0,0], [0,0,1,0]])
+DelEff[a,f]     = const([[0,0,0,0], [0,0,0,1]])
+NegOne          = const(-1.0)
+NegThreshold    = const(-0.5)
+
+Support[a]       = State0[f] Pre[a,f]
+SupportShift[a]  = Support[a] + NegThreshold
+Applicable[a]    = step(SupportShift[a])
+
+AddState[f]      = Applicable[a] AddEff[a,f]
+DelState[f]      = Applicable[a] DelEff[a,f]
+
+NegDel[f]        = NegOne DelState[f]
+StateRaw[f]      = State0[f]
+StateRaw[f]      = AddState[f]
+StateRaw[f]      = NegDel[f]
+State1[f]        = step(StateRaw[f])
+
+"runs/planner_state1.tsv" = State1[f]
+export State1

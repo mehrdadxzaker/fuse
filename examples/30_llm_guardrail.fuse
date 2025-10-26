@@ -1,0 +1,21 @@
+# LLM reasoning head with guardrail gating in embedding space
+
+LLMLogits[t]     = const([2.5,1.2,-0.3,0.8])
+TokenEmb[t,d]   = const([[0.6,-0.1,0.3], [0.2,0.5,-0.2], [-0.4,0.3,0.1], [0.1,-0.2,0.4]])
+GuardVector[d]   = const([0.7,-0.5,0.2])
+Penalty          = const(5.0)
+Threshold        = const(0.4)
+NegOne           = const(-1.0)
+NegThreshold     = NegOne Threshold
+
+GuardScore[t]    = TokenEmb[t,d] GuardVector[d]
+GuardShift[t]    = GuardScore[t] + NegThreshold
+Violation[t]     = step(GuardShift[t])
+PenaltyTerm[t]   = Penalty Violation[t]
+NegPenalty[t]    = NegOne PenaltyTerm[t]
+Adjusted[t]      = LLMLogits[t]
+Adjusted[t]      = NegPenalty[t]
+Reasoned[t]      = softmax(Adjusted[t])
+
+"runs/llm_guardrail_logits.npz" = Adjusted[t]
+export Reasoned

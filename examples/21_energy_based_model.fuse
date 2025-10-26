@@ -1,0 +1,20 @@
+# Energy-Based Model scoring via tensor contractions
+
+Visible[d]     = const([1.0,0.0,1.0,0.5])
+Weight[h,d]   = const([[0.3,-0.2,0.4,0.1], [-0.5,0.6,-0.1,0.2], [0.2,0.3,0.1,-0.4]])
+BiasH[h]       = const([0.1,-0.2,0.0])
+BiasV[d]       = const([0.0,0.1,-0.1,0.2])
+
+Hidden[h]      = Weight[h,d] Visible[d] + BiasH[h]
+HiddenAct[h]   = sig(Hidden[h], T=1.0)
+Reconstruct[d] = Weight[h,d] HiddenAct[h] + BiasV[d]
+
+EnergyHidden    = HiddenAct[h] BiasH[h]
+EnergyVisible   = Visible[d] BiasV[d]
+EnergyPair      = HiddenAct[h] Weight[h,d] Visible[d]
+Energy          = EnergyHidden + EnergyVisible + EnergyPair
+
+"runs/ebm_energy.npy" = Energy
+"runs/ebm_recon.npz" = Reconstruct[d]
+export Energy
+export Reconstruct

@@ -1,0 +1,24 @@
+# Hybrid graph + transformer attention block
+
+Adj[u,v]        = const([[0,1,1,0], [1,0,1,1], [1,1,0,0], [0,1,0,0]])
+Feat[u,d]       = const([[0.6,0.2,-0.1], [0.1,0.7,0.3], [-0.2,0.4,0.5], [0.3,-0.1,0.2]])
+WGraph[d,d']    = const([[0.2,-0.3], [0.4,0.1], [-0.2,0.5]])
+WQ[dk,d']       = const([[0.3,-0.1], [0.2,0.4]])
+WK[dk,d']       = const([[0.1,0.5], [-0.4,0.3]])
+WV[dv,d']       = const([[0.2,-0.1], [0.5,0.3]])
+InvSqrt          = const(0.5)
+
+Embed[u,d']     = Feat[u,d] WGraph[d,d']
+Message[u,d']   = Adj[u,v] Embed[v,d']
+Token[u,d']     = Message[u,d'] + Embed[u,d']
+
+Q[u,dk]         = WQ[dk,d'] Token[u,d']
+K[u,dk]         = WK[dk,d'] Token[u,d']
+V[u,dv]         = WV[dv,d'] Token[u,d']
+
+Scores[u,u']    = Q[u,dk] K[u',dk] InvSqrt
+Hybrid[u,u'.]   = softmax(Scores[u,u'])
+Context[u,dv]   = Hybrid[u,u'] V[u',dv]
+
+"runs/graph_transformer_context.npz" = Context[u,dv]
+export Context

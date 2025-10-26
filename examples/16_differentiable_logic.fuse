@@ -1,0 +1,13 @@
+# Differentiable logic network with soft implication
+
+PredicateA[x]    = const([0.8,0.2,0.6])
+PredicateB[x]    = const([0.7,0.9,0.1])
+RuleStrength     = const(5.0)
+BaseC[x]         = const([0.3,0.3,0.3])
+
+Conj[x]          = PredicateA[x] PredicateB[x]
+Logit[x]         = BaseC[x] + RuleStrength Conj[x]
+Conclusion[x]    = sig(Logit[x], T=1.0)
+
+"runs/dlogic_conclusion.npz" = Conclusion[x]
+export Conclusion

@@ -1,0 +1,36 @@
+# Transformer block with self-attention + feed-forward
+
+X[p,d]          = const([[0.5,0.1,-0.3,0.2], [-0.2,0.4,0.6,-0.1], [0.3,-0.5,0.2,0.7]])
+WQ[dk,d]        = const([[0.2,-0.1,0.3,0.4], [0.5,0.2,-0.2,0.1]])
+WK[dk,d]        = const([[0.4,-0.3,0.1,-0.2], [-0.1,0.5,0.2,0.3]])
+WV[dv,d]        = const([[0.6,-0.1,0.2,0.5], [-0.3,0.4,0.1,-0.2]])
+FF1[ff,dv]      = const([[0.2,-0.1], [0.3,0.4], [-0.5,0.2]])
+FF2[d,ff]       = const([[0.1,-0.2,0.3], [0.4,0.1,-0.1], [-0.3,0.2,0.5], [0.2,-0.4,0.2]])
+Bias1[ff]        = const([0.1,-0.1,0.0])
+Bias2[d]         = const([0.0,0.1,-0.1,0.2])
+InvSqrt          = const(0.5)
+Causal[p,p']    = causal_mask(3)
+Ones[p,p']      = const([[1,1,1], [1,1,1], [1,1,1]])
+NegOne           = const(-1.0)
+
+Q[p,dk]         = WQ[dk,d] X[p,d]
+K[p,dk]         = WK[dk,d] X[p,d]
+V[p,dv]         = WV[dv,d] X[p,d]
+
+Scaled[p,p']    = Q[p,dk] K[p',dk] InvSqrt
+NegCausal[p,p'] = NegOne Causal[p,p']
+PenaltyMask[p,p'] = Ones[p,p']
+PenaltyMask[p,p'] = NegCausal[p,p']
+Penalty[p,p']   = PenaltyMask[p,p'] const(-10000.0)
+Masked[p,p']    = Scaled[p,p'] + Penalty[p,p']
+Attention[p,p'.] = softmax(Masked[p,p'])
+Context[p,dv]   = Attention[p,p'] V[p',dv]
+
+FFHidden[p,ff]  = FF1[ff,dv] Context[p,dv]
+FFShift[p,ff]   = FFHidden[p,ff] + Bias1[ff]
+FFAct[p,ff]     = gelu(FFShift[p,ff])
+Output[p,d]     = FF2[d,ff] FFAct[p,ff]
+Final[p,d]      = Output[p,d] + Bias2[d]
+
+"runs/transformer_block.npz" = Final[p,d]
+export Final

@@ -1,0 +1,25 @@
+# Rule-based agent / policy guard with tensorized decisions
+
+ActionScore[a]   = const([0.7,-0.2,0.4])
+Risk[a]          = const([0.1,0.9,0.3])
+Threshold        = const(0.5)
+Compliance[a]    = const([1,0,1])
+NegOne           = const(-1.0)
+OneVec[a]        = const([1,1,1])
+NegThreshold     = NegOne Threshold
+
+RiskNeg[a]       = NegOne Risk[a]
+AllowLogit[a]    = ActionScore[a]
+AllowLogit[a]    = RiskNeg[a]
+Shift[a]         = AllowLogit[a] + NegThreshold
+AllowMask[a]     = step(Shift[a])
+Compliant[a]     = AllowMask[a] Compliance[a]
+
+NegCompliance[a] = NegOne Compliant[a]
+BlockMask[a]     = OneVec[a]
+BlockMask[a]     = NegCompliance[a]
+
+"runs/policy_allow.tsv" = Compliant[a]
+"runs/policy_block.tsv" = BlockMask[a]
+export Compliant
+export BlockMask

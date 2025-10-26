@@ -1,0 +1,19 @@
+# Policy reasoning network for safe RL gating
+
+QValue[s,a]     = const([[1.2,0.5,-0.1], [0.6,1.0,0.2]])
+Penalty[a]       = const([0.1,0.8,0.3])
+SafetyThresh     = const(0.4)
+Preference[s,a] = const([[1,0,1], [0,1,1]])
+NegOne           = const(-1.0)
+PenaltyNeg[a]    = NegOne Penalty[a]
+NegThresh        = NegOne SafetyThresh
+
+Adjusted[s,a]   = QValue[s,a]
+Adjusted[s,a]   = PenaltyNeg[a]
+Shift[s,a]      = Adjusted[s,a] + NegThresh
+Allowed[s,a]    = step(Shift[s,a])
+Policy[s,a]     = Allowed[s,a] Preference[s,a]
+Distribution[s,a] = softmax(Policy[s,a])
+
+"runs/policy_reasoning.npz" = Distribution[s,a]
+export Distribution

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fuse-ai"
+version = "0.0.1"
+description = "Fuse: tensor-equation DSL as a library (NumPy backend + Torch/JAX stubs)"
+readme = "README.md"
+authors = [{name = "Fuse OSS"}]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+torch = [
+    # Prefer a simple, inclusive pin; avoid blocking working envs
+    "torch>=2.8,<3 ; sys_platform != 'darwin' or platform_machine == 'arm64'",
+]
+jax = [
+    "jax>=0.4.30",
+]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-requests",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: Marks tests that exercise GPU backends or other slow execution paths.",
+]

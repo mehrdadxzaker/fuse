@@ -1,0 +1,27 @@
+# Multi-Layer Perceptron demo
+
+# Sources
+Input[b,d]      = const([[0.8,0.2,0.5], [0.1,0.6,0.4]])
+W1[h,d]         = const([[0.3,-0.2,0.5], [0.7,0.1,-0.4]])
+B1[h]            = const([0.1,-0.2])
+W2[o,h]         = const([[0.2,0.6], [-0.5,0.3]])
+B2[o]            = const([0.0,0.1])
+
+# Hidden activation
+HiddenLinear[b,h] = W1[h,d] Input[b,d]
+HiddenBias[b,h]   = B1[h]
+Hidden[b,h]       = HiddenLinear[b,h] + HiddenBias[b,h]
+Activation[b,h]   = gelu(Hidden[b,h])
+
+# Output layer
+Logits[b,o]       = W2[o,h] Activation[b,h]
+OutputBias[b,o]   = B2[o]
+Scores[b,o]       = Logits[b,o] + OutputBias[b,o]
+Probs[b,o]        = softmax(Scores[b,o])
+MeanProb[o]       avg= Probs[b,o]
+PeakProb[b]       max= Probs[b,o]
+
+"runs/mlp_scores.npz" = Scores[b,o]
+export Probs
+export MeanProb
+export PeakProb

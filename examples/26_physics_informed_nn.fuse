@@ -1,0 +1,23 @@
+# Physics-Informed Neural Network residual enforcing PDE constraints
+
+Points[n,d]    = const([[0.0,0.0], [0.5,0.25], [1.0,0.5]])
+Weights1[h,d]  = const([[1.2,-0.3], [-0.5,0.8], [0.4,0.2]])
+Bias1[h]        = const([0.1,-0.2,0.0])
+Weights2[1,h]  = const([[0.3,-0.6,0.5]])
+Diff[n,n']     = const([[1,-2,1], [-2,4,-2], [1,-2,1]])
+Source[n]       = const([0.0,1.0,0.0])
+NegOne          = const(-1.0)
+
+Hidden[n,h]    = Weights1[h,d] Points[n,d] + Bias1[h]
+HiddenAct[n,h] = gelu(Hidden[n,h])
+Pred[n]         = Weights2[1,h] HiddenAct[n,h]
+
+Laplace[n]      = Diff[n,n'] Pred[n']
+NegSource[n]    = NegOne Source[n]
+Residual[n]     = Laplace[n]
+Residual[n]     = NegSource[n]
+
+"runs/pinn_prediction.npz" = Pred[n]
+"runs/pinn_residual.npz"   = Residual[n]
+export Pred
+export Residual

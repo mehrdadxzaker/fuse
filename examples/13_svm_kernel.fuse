@@ -1,0 +1,18 @@
+# Support Vector Machine with kernelized margin computation
+
+KernelTrain[i,j] = const([[1.0,0.8,0.3], [0.8,1.0,0.4], [0.3,0.4,1.0]])
+KernelEval[i,x]  = const([[0.9,0.2], [0.7,0.5], [0.4,0.6]])
+Labels[i]         = const([1,-1,1])
+Alpha[i]          = const([0.6,0.4,0.2])
+Bias              = const(-0.1)
+
+Decision[x]       = Alpha[i] Labels[i] KernelEval[i,x] + Bias
+MarginMatrix[i,j] = Alpha[i] Alpha[j] Labels[i] Labels[j] KernelTrain[i,j]
+OneI[i]            = const([1,1,1])
+OneJ[j]            = const([1,1,1])
+Margin             = MarginMatrix[i,j] OneI[i] OneJ[j]
+
+"runs/svm_decision.npz" = Decision[x]
+"runs/svm_margin.npy"   = Margin
+export Decision
+export Margin

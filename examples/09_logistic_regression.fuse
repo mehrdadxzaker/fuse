@@ -1,0 +1,21 @@
+# Naive Bayes / Logistic regression style multiplicative projection
+
+Features[s,f]   = const([[1.0,0.0,1.0], [0.0,1.0,0.0]])
+LogClass[c]      = const([-0.5108,-0.9163])  # log priors
+LogCond[c,f]    = const([[-0.2231,-1.2040,-0.3567], [-1.6094,-0.3567,-1.2040]])
+Weights[c,f]    = const([[1.2,-0.5,0.8], [-0.4,1.0,-0.6]])
+Bias[c]          = const([0.0,-0.2])
+
+# Naive Bayes style score
+NBLog[s,c]      = Features[s,f] LogCond[c,f]
+NBScore[s,c]    = NBLog[s,c] + LogClass[c]
+
+# Logistic regression logit
+LRLinear[s,c]   = Weights[c,f] Features[s,f]
+LRShift[s,c]    = LRLinear[s,c] + Bias[c]
+LRProb[s,c]     = softmax(LRShift[s,c])
+
+"runs/nb_scores.npz" = NBScore[s,c]
+"runs/lr_probs.npz"  = LRProb[s,c]
+export NBScore
+export LRProb

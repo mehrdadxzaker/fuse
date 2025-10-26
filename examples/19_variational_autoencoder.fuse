@@ -1,0 +1,36 @@
+# Variational Autoencoder with encoder, decoder, and KL surrogate
+
+Input[b,d]      = const([[0.9,0.1,0.2], [0.2,0.7,0.3]])
+WMean[z,d]      = const([[0.3,-0.2,0.5], [-0.1,0.4,0.2]])
+BMean[z]         = const([0.0,0.1])
+WLogVar[z,d]    = const([[0.1,0.2,-0.1], [0.3,-0.4,0.2]])
+BLogVar[z]       = const([-0.2,-0.1])
+WDec[h,z]       = const([[0.5,-0.3], [0.2,0.4], [-0.1,0.2]])
+BDec[h]          = const([0.0,0.1,-0.1])
+WOut[d,h]       = const([[0.2,0.1,-0.3], [-0.4,0.5,0.2], [0.3,-0.2,0.4]])
+
+LatentMean[b,z]   = WMean[z,d] Input[b,d] + BMean[z]
+LatentLogVar[b,z] = WLogVar[z,d] Input[b,d] + BLogVar[z]
+VarOffset          = const(1.0)
+LatentShift[b,z]  = LatentLogVar[b,z] + VarOffset
+LatentVar[b,z]    = relu(LatentShift[b,z])
+Latent[b,z]       = LatentMean[b,z]
+NegOne             = const(-1.0)
+LatentSq[b,z]     = LatentMean[b,z] LatentMean[b,z]
+NegLog[b,z]       = NegOne LatentLogVar[b,z]
+
+Hidden[b,h]       = WDec[h,z] Latent[b,z] + BDec[h]
+HiddenAct[b,h]    = relu(Hidden[b,h])
+ReconLogits[b,d]  = WOut[d,h] HiddenAct[b,h]
+ReconProb[b,d]    = softmax(ReconLogits[b,d])
+
+KLTerm[b,z]       = LatentSq[b,z]
+KLTerm[b,z]       = LatentVar[b,z]
+KLTerm[b,z]       = NegLog[b,z]
+KLTerm[b,z]       = NegOne
+KL[b]              = KLTerm[b,z]
+
+"runs/vae_recon.npz" = ReconProb[b,d]
+"runs/vae_kl.npy"    = KL[b]
+export ReconProb
+export KL

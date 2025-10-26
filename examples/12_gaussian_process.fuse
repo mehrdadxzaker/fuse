@@ -1,0 +1,22 @@
+# Gaussian Process regression with pre-computed kernels
+
+KTrain[n,n']    = const([[1.0,0.8,0.5], [0.8,1.0,0.6], [0.5,0.6,1.0]])
+KTrainInv[n,n'] = const([[3.256,-2.163,-0.369], [-2.163,3.536,-1.427], [-0.369,-1.427,2.329]])
+KCross[n,m]     = const([[0.9,0.4], [0.7,0.5], [0.4,0.8]])
+KTest[m,m']     = const([[1.0,0.7], [0.7,1.0]])
+Targets[n]       = const([1.2,-0.3,0.5])
+NegOne           = const(-1.0)
+
+Alpha[n]         = KTrainInv[n,n'] Targets[n']
+PredMean[m]      = KCross[n,m] Alpha[n]
+
+Mid[n,m']       = KTrainInv[n,n'] KCross[n',m']
+CrossTerm[m,m'] = KCross[n,m] Mid[n,m']
+NegCross[m,m']  = NegOne CrossTerm[m,m']
+PredCov[m,m']   = KTest[m,m']
+PredCov[m,m']   = NegCross[m,m']
+
+"runs/gp_mean.npz" = PredMean[m]
+"runs/gp_cov.npz"  = PredCov[m,m']
+export PredMean
+export PredCov

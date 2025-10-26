@@ -1,0 +1,17 @@
+# Deductive rule + analogical reasoning via embeddings and temperature T
+
+# Facts as Boolean relations
+Sister(x, y)   = "data/sister.tsv"
+Parent(y, z)   = "data/parent.tsv"
+
+# Deductive rule (Boolean join + step)
+Aunt[x, z]     = step(Sister[x, y] Parent[y, z])
+
+# Embeddings & analogical score
+Emb[obj, d]    = "ckpt/object_emb.npy"
+EmbAunt[i, j]  = Aunt(x, y) Emb[x, i] Emb[y, j]
+Score[a, b]    = sig( EmbAunt[i, j] Emb[a, i] Emb[b, j] )
+
+"runs/aunts.tsv"    = Aunt[x, z]
+"runs/sally.jsonl"  = topk(Score[a, b], k=3)
+export Aunt

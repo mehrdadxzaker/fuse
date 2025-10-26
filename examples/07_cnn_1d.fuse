@@ -1,0 +1,16 @@
+# 1D Convolutional network layer with sliding receptive fields
+
+Signal[x]        = const([0.5,-0.1,0.3,0.7,-0.2])
+Kernel[k]        = const([0.2,0.5,-0.3])
+Bias             = const(0.05)
+
+# Sliding window indicator: Window[x,x',k] = 1 when x' is within receptive field of x for offset k
+Window[x,x',k] = const([[[1,0,0],[0,1,0],[0,0,1],[0,0,0],[0,0,0]], [[0,1,0],[1,0,1],[0,1,0],[0,0,1],[0,0,0]], [[0,0,1],[0,1,0],[1,0,1],[0,1,0],[0,0,1]], [[0,0,0],[0,0,1],[0,1,0],[1,0,1],[0,1,0]], [[0,0,0],[0,0,0],[0,0,1],[0,1,0],[1,0,0]]])
+
+Patch[x,k]      = Window[x,x',k] Signal[x']
+Conv[x]          = Patch[x,k] Kernel[k]
+Shifted[x]       = Conv[x] + Bias
+Act[x]           = relu(Shifted[x])
+
+"runs/cnn_conv.npz" = Act[x]
+export Act

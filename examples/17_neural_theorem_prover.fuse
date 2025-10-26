@@ -1,0 +1,14 @@
+# Neural Theorem Prover style backward-chaining score
+
+EmbParent[x,y]  = const([[0.9,0.1,0.0], [0.2,0.8,0.1], [0.0,0.3,0.7]])
+EmbSibling[x,y] = const([[0.1,0.9,0.0], [0.0,0.2,0.8], [0.7,0.1,0.3]])
+QueryHead[x]     = const([1.0,0.0,0.0])
+QueryTail[y]     = const([0.0,1.0,0.0])
+Temperature      = const(0.2)
+
+Backward[x,y]   = EmbParent[x,z] EmbSibling[z,y]
+GoalScore        = Backward[x,y] QueryHead[x] QueryTail[y]
+Confidence       = sig(GoalScore, Temperature)
+
+"runs/ntp_confidence.npy" = Confidence
+export Confidence

@@ -1,0 +1,27 @@
+# Knowledge graph embeddings: TransE and DistMult style scores
+
+EntityHead[e,d] = const([[0.5,0.1,-0.2], [-0.3,0.4,0.2]])
+EntityTail[o,d] = const([[0.2,-0.1,0.3], [0.6,0.0,-0.4]])
+RelTrans[d]      = const([0.1,-0.2,0.05])
+RelDist[d]       = const([1.2,0.9,0.7])
+NegOne           = const(-1.0)
+OneHead[e]       = const([1,1])
+OneTail[o]       = const([1,1])
+
+HeadPart[e,o,d] = EntityHead[e,d] OneTail[o]
+RelPart[e,o,d]  = RelTrans[d] OneHead[e] OneTail[o]
+TailPart[e,o,d] = EntityTail[o,d] OneHead[e]
+TailNeg[e,o,d]  = NegOne TailPart[e,o,d]
+Diff[e,o,d]    = HeadPart[e,o,d]
+Diff[e,o,d]    = RelPart[e,o,d]
+Diff[e,o,d]    = TailNeg[e,o,d]
+NormSq[e,o]     = Diff[e,o,d] Diff[e,o,d]
+NegNorm[e,o]    = NegOne NormSq[e,o]
+ScoreTrans[e,o] = NegNorm[e,o]
+
+ScoreDist[e,o]  = EntityHead[e,d] RelDist[d] EntityTail[o,d]
+Scores[e,o]     = concat(ScoreTrans[e,o], ScoreDist[e,o], axis=0)
+
+"runs/kg_scores.npz" = Scores[e,o]
+export ScoreTrans
+export ScoreDist

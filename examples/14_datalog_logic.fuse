@@ -1,0 +1,16 @@
+# Datalog-style logic inference as tensor joins and projections
+
+Parent[x,y]     = const([[0,1,0], [0,0,1], [0,0,0]])
+Sibling[x,y]    = const([[0,0,1], [0,0,0], [1,0,0]])
+
+AncestorDirect[x,z] = Parent[x,z]
+AncestorStep[x,z]   = Parent[x,y] Parent[y,z]
+AncestorRaw[x,z]    = AncestorDirect[x,z] + AncestorStep[x,z]
+Ancestor[x,z]       = step(AncestorRaw[x,z])
+
+Aunt[x,z]           = Sibling[x,y] Parent[y,z]
+
+"runs/logic_ancestor.tsv" = Ancestor[x,z]
+"runs/logic_aunt.tsv"     = Aunt[x,z]
+export Ancestor
+export Aunt

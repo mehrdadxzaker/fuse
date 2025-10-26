@@ -1,0 +1,18 @@
+# Probabilistic + neural fusion (VAE posterior with rule prior)
+
+Posterior[z]     = const([0.6,0.3,0.1])
+RulePrior[z]     = const([0.5,0.2,0.3])
+Observation[d]   = const([0.7,0.4])
+Decoder[d,z]    = const([[0.3,-0.2,0.5], [0.1,0.4,-0.3]])
+
+NeuralRecon[d]   = Decoder[d,z] Posterior[z]
+PriorBlend[z]    = Posterior[z] + RulePrior[z]
+Normalized[z]    = softmax(PriorBlend[z])
+
+Consistency      = PriorBlend[z] RulePrior[z]
+
+"runs/prob_neural_recon.npz" = NeuralRecon[d]
+"runs/prob_neural_posterior.npy" = Normalized[z]
+export NeuralRecon
+export Normalized
+export Consistency

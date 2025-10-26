@@ -1,0 +1,27 @@
+# Simplified diffusion model denoising chain
+
+Clean[d]      = const([0.8,-0.4,0.2])
+Noise0[d]     = const([0.1,-0.2,0.3])
+Noise1[d]     = const([-0.3,0.2,-0.1])
+Noise2[d]     = const([0.05,-0.05,0.1])
+Alpha0        = const(0.7)
+Alpha1        = const(0.5)
+Alpha2        = const(0.3)
+Beta0         = const(0.3)
+Beta1         = const(0.5)
+Beta2         = const(0.7)
+NegOne        = const(-1.0)
+NegNoise0[d]  = NegOne Noise0[d]
+NegNoise1[d]  = NegOne Noise1[d]
+NegNoise2[d]  = NegOne Noise2[d]
+
+Noisy0[d]     = Clean[d] Alpha0 + Noise0[d] Beta0
+Noisy1[d]     = Noisy0[d] Alpha1 + Noise1[d] Beta1
+Noisy2[d]     = Noisy1[d] Alpha2 + Noise2[d] Beta2
+
+Denoised2[d]  = Noisy2[d] + NegNoise2[d]
+Denoised1[d]  = Denoised2[d] + NegNoise1[d]
+Estimate[d]   = Denoised1[d] + NegNoise0[d]
+
+"runs/diffusion_trace.npz" = concat(Noisy0[d], Noisy1[d], Noisy2[d], axis=0)
+export Estimate
