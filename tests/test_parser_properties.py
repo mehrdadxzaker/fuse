@@ -214,6 +214,24 @@ def test_parser_accepts_random_equations(seed):
                 assert isinstance(eq.rhs, (Term, TensorRef))
 
 
+def test_parser_supports_trailing_commas():
+    program = """
+    A[i] = concat(B[i], axis="i",)
+    Params = const({"bias": [0, 1,],},)
+    """
+
+    ir = parse(program)
+    eq_map = {eq.lhs.name: eq for eq in ir.equations}
+
+    concat_call = eq_map["A"].rhs
+    assert isinstance(concat_call, FuncCall)
+    assert concat_call.kwargs["axis"] == "i"
+
+    const_call = eq_map["Params"].rhs
+    assert isinstance(const_call, FuncCall)
+    assert const_call.arg == {"bias": [0, 1]}
+
+
 @pytest.mark.parametrize("seed", range(25))
 def test_parser_whitespace_equivalence(seed):
     rng = np.random.default_rng(seed)

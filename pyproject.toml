@@ -12,6 +12,7 @@ license = {file = "LICENSE"}
 requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.21",
+    "lark>=1.1",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,95 @@
+%import common.CNAME -> NAME
+%import common.SIGNED_NUMBER
+%import common.ESCAPED_STRING -> ESCAPED_STRING
+%import common.WS_INLINE
+%ignore WS_INLINE
+
+NEWLINE: /(\r?\n)+/
+
+COMMENT: /#[^\n]*/
+%ignore COMMENT
+
+COMMA: ","
+
+ASSIGN_MAX: "max="
+ASSIGN_AVG: "avg="
+ASSIGN_PLUS: "+="
+ASSIGN_EQ: "="
+
+INDEX_TOKEN: /[*A-Za-z_:][A-Za-z0-9_:'+\-:\.]*/
+
+program: _nl* (statement (_nl+ statement)*)? _nl*
+
+_nl: NEWLINE
+
+statement: export_stmt
+         | sink_stmt
+         | assignment_stmt
+
+export_stmt: "export" NAME
+
+sink_stmt: ESCAPED_STRING ASSIGN_EQ sum_expr
+
+assignment_stmt: assignment_lhs assignment_op sum_expr
+
+assignment_op: ASSIGN_MAX -> max
+             | ASSIGN_AVG -> avg
+             | ASSIGN_PLUS -> plus
+             | ASSIGN_EQ   -> eq
+
+assignment_lhs: NAME index_suffix?   -> assign_ref
+
+sum_expr: term ("+" term)*    -> sum_terms
+
+?term: factor+                -> term_product
+
+?factor: tensor_ref
+       | func_call
+       | literal
+       | "(" sum_expr ")"      -> grouped_sum
+
+func_call: NAME "(" func_call_body
+
+func_call_body: _nl* ")"                    -> call_empty
+              | _nl* call_args _nl* ")"
+
+call_args: call_arg (_nl* COMMA _nl* call_arg)* (_nl* COMMA)?
+
+?call_arg: NAME ASSIGN_EQ sum_expr  -> kwarg
+         | sum_expr
+
+TRUE: "true"i
+FALSE: "false"i
+NONE: "none"i
+
+?literal: base_literal
+        | list_literal
+        | dict_literal
+
+base_literal: ESCAPED_STRING        -> string
+            | SIGNED_NUMBER         -> number
+            | TRUE                  -> true
+            | FALSE                 -> false
+            | NONE                  -> none
+
+list_literal: "[" _nl* list_items? _nl* "]"     -> list_literal
+list_items: literal (_nl* COMMA _nl* literal)* (_nl* COMMA)?
+dict_literal: "{" _nl* dict_items? _nl* "}"     -> dict_literal
+dict_items: dict_pair (_nl* COMMA _nl* dict_pair)* (_nl* COMMA)?
+dict_pair: literal ":" literal                   -> dict_pair
+
+tensor_ref: NAME index_suffix?
+
+index_suffix: "[" index_list "]"   -> square
+            | "(" index_list ")"   -> paren
+
+index_list: [index ("," index)*]
+
+?index: slice_index
+      | index_symbol
+
+index_symbol: INDEX_TOKEN
+
+slice_index: slice_bound ":" slice_bound [":" slice_bound]
+slice_bound: SIGNED_NUMBER   -> slice_number
+           |                 -> slice_empty

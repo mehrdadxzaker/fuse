@@ -11,8 +11,8 @@ import numpy as np
 from ..core.builtins import read_tensor_from_file, write_tensor_to_file
 from ..core.cache import CacheManager, cache_fingerprint, cache_key_from_fingerprint
 from ..core.evaluator_numpy import (
-    ExecutionConfig,
     DemandNumpyRunner,
+    ExecutionConfig,
     NumpyRunner,
     _factor_indices,
     _first_tensor_ref,
@@ -56,11 +56,11 @@ def compile(
     device_spec = device if device != "auto" else cfg.device
     if cfg.device != device_spec:
         cfg = replace(cfg, device=device_spec).normalized()
+    policy_obj = policies or RuntimePolicies()
     if cfg.mode == "demand":
         return DemandNumpyRunner(program.ir, config=cfg, policies=policy_obj)
     if cfg.projection_strategy == "monte_carlo":
         return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
-    policy_obj = policies or RuntimePolicies()
 
     if torch is None:
         return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
