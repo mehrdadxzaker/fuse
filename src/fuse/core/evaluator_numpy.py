@@ -398,8 +398,28 @@ class NumpyRunner:
         return exports
 
     def explain(self, *, json: bool = False):
-        if json:
-            return {"logs": [_json_ready(entry) for entry in self.logs]}
+        eq_metrics: List[Dict[str, Any]] = []
+        total_time_ms = 0.0
+        total_flops = 0.0
+        total_bytes = 0.0
+
+        def _format_metric(value: Optional[float], unit: str) -> Optional[str]:
+            if value is None:
+                return None
+            magnitude = float(value)
+            if magnitude == 0:
+                return f"{unit}=0"
+            suffixes = [
+                (1e12, "T"),
+                (1e9, "G"),
+                (1e6, "M"),
+                (1e3, "K"),
+            ]
+            for threshold, label in suffixes:
+                if magnitude >= threshold:
+                    return f"{unit}={magnitude / threshold:.2f}{label}"
+            return f"{unit}={magnitude:.2f}"
+
         lines: List[str] = []
         for entry in self.logs:
             kind = entry.get("kind")
@@ -426,17 +446,81 @@ class NumpyRunner:
                     else:
                         temp_str = f"{float(temp):g}"
                     details.append(f"T={temp_str}")
+                flops = eq.get("flops")
+                bytes_total = eq.get("bytes_total")
+                flops_str = _format_metric(flops, "flops") if flops is not None else None
+                bytes_str = _format_metric(bytes_total, "bytes") if bytes_total is not None else None
+                if flops_str:
+                    details.append(flops_str)
+                if bytes_str:
+                    details.append(bytes_str)
                 table = eq.get("index_table")
                 if table:
                     details.append(f"idx[{table}]")
                 status = eq["status"]
                 iteration = eq["iteration"]
-                timing = f" {eq['duration_ms']:.3f}ms" if eq.get("duration_ms") is not None else ""
+                duration = eq.get("duration_ms")
+                if duration is not None:
+                    total_time_ms += float(duration)
+                if flops is not None:
+                    total_flops += float(flops)
+                if bytes_total is not None:
+                    total_bytes += float(bytes_total)
+                eq_metrics.append(
+                    {
+                        "name": eq.get("name"),
+                        "iteration": iteration,
+                        "status": status,
+                        "duration_ms": duration,
+                        "flops": flops,
+                        "bytes_total": bytes_total,
+                    }
+                )
+                timing = f" {duration:.3f}ms" if duration is not None else ""
                 note = f" {' '.join(details)}" if details else ""
                 lines.append(f"[iter {iteration:02d}] {eq['name']} {status}{timing}{note}")
             elif kind == "sink":
                 sk = entry["sink"]
                 lines.append(f"[sink] {sk['path']} <- {sk['name']} ({sk['mode']})")
+
+        perf_summary: Optional[Dict[str, Any]] = None
+        if eq_metrics:
+            max_entry = max(
+                eq_metrics,
+                key=lambda item: item["duration_ms"] if item["duration_ms"] is not None else -1.0,
+            )
+            perf_summary = {
+                "equations": len(eq_metrics),
+                "total_ms": total_time_ms,
+                "total_flops": total_flops or None,
+                "total_bytes": total_bytes or None,
+                "max_equation": {
+                    "name": max_entry.get("name"),
+                    "duration_ms": max_entry.get("duration_ms"),
+                    "iteration": max_entry.get("iteration"),
+                },
+            }
+            summary_parts: List[str] = [
+                f"total={total_time_ms:.3f}ms",
+                f"equations={len(eq_metrics)}",
+            ]
+            flops_summary = _format_metric(total_flops if total_flops else None, "flops")
+            bytes_summary = _format_metric(total_bytes if total_bytes else None, "bytes")
+            if flops_summary:
+                summary_parts.append(flops_summary)
+            if bytes_summary:
+                summary_parts.append(bytes_summary)
+            max_duration = max_entry.get("duration_ms")
+            if max_duration is not None:
+                summary_parts.append(f"max={max_entry.get('name')}({float(max_duration):.3f}ms)")
+            lines.append(f"[perf] {' '.join(filter(None, summary_parts))}")
+
+        if json:
+            payload: Dict[str, Any] = {"logs": [_json_ready(entry) for entry in self.logs]}
+            if perf_summary is not None:
+                payload["summary"] = perf_summary
+            return payload
+
         return "\n".join(lines)
 
     # Internal helpers ----------------------------------------------------------
