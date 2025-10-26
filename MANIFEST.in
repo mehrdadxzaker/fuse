@@ -1,0 +1,21 @@
+include README.md
+include pyproject.toml
+include LICENSE
+
+graft src
+graft docs
+graft examples
+
+prune docs/_build
+prune runs
+prune tmp
+prune .venv
+prune .venv-arm
+prune .pytest_cache
+prune .ruff_cache
+prune .mypy_cache
+prune .uv_cache
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * .DS_Store

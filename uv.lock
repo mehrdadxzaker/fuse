@@ -88,6 +88,13 @@ jax = [
     { name = "jax", version = "0.6.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "jax", version = "0.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
+bench = [
+    { name = "jax", version = "0.4.30", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "jax", version = "0.6.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
+    { name = "jax", version = "0.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "torch", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.10' and platform_machine == 'arm64') or (python_full_version < '3.10' and sys_platform != 'darwin')" },
+    { name = "torch", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and platform_machine == 'arm64') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+]
 torch = [
     { name = "torch", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.10' and platform_machine == 'arm64') or (python_full_version < '3.10' and sys_platform != 'darwin')" },
     { name = "torch", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and platform_machine == 'arm64') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
@@ -95,15 +102,17 @@ torch = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jax", marker = "extra == 'bench'", specifier = ">=0.4.30" },
     { name = "jax", marker = "extra == 'jax'", specifier = ">=0.4.30" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "numpy", specifier = ">=1.21" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "torch", marker = "(platform_machine == 'arm64' and extra == 'bench') or (sys_platform != 'darwin' and extra == 'bench')", specifier = ">=2.8,<3" },
     { name = "torch", marker = "(platform_machine == 'arm64' and extra == 'torch') or (sys_platform != 'darwin' and extra == 'torch')", specifier = ">=2.8,<3" },
     { name = "types-requests", marker = "extra == 'dev'" },
 ]
-provides-extras = ["torch", "jax", "dev"]
+provides-extras = ["torch", "jax", "dev", "bench"]
 
 [[package]]
 name = "importlib-metadata"

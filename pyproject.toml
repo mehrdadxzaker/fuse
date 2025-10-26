@@ -8,6 +8,7 @@ version = "0.0.1"
 description = "Fuse: tensor-equation DSL as a library (NumPy backend + Torch/JAX stubs)"
 readme = "README.md"
 authors = [{name = "Fuse OSS"}]
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.21",
@@ -21,8 +22,14 @@ torch = [
 jax = [
     "jax>=0.4.30",
 ]
+bench = [
+    # Bundle GPU-capable backends for benchmarking helpers
+    "torch>=2.8,<3 ; sys_platform != 'darwin' or platform_machine == 'arm64'",
+    "jax>=0.4.30",
+]
 dev = [
     "pytest>=8.2",
+    "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.11",
     "types-requests",

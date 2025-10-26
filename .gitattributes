@@ -1,0 +1,5 @@
+.venv* export-ignore
+.pytest_cache/ export-ignore
+.ruff_cache/ export-ignore
+__pycache__/ export-ignore
+.DS_Store export-ignore

@@ -7,11 +7,33 @@ It keeps the code small and readable while covering end-to-end flows (sources â†
 > Paper context: logical rules â‰™ Einstein sums; anything not on the LHS is implicitly **projected** (summed) out;
 > equations with the same LHS implicitly add; files are first-class **sources/sinks** (reading/writing tensors).
 
-## Install (editable)
+## Install
+
+### Pip
 
 ```bash
-pip install -e .
+pip install fuse-ai
+pip install fuse-ai[torch]   # Torch FX backend
+pip install fuse-ai[jax]     # JAX backend
+pip install fuse-ai[bench]   # Torch + JAX bundle for benchmarks
+pip install fuse-ai[dev]     # Linting, typing, tests
 ```
+
+### Editable (local development)
+
+```bash
+pip install -e ".[dev]"
+```
+
+### Using uv
+
+The repository ships a `uv.lock` for reproducible envs. To sync the dev environment:
+
+```bash
+uv sync --extra dev
+```
+
+You can swap in other extras (e.g., `--extra torch --extra jax` or `--all-extras`) to mirror the `pip install fuse-ai[...]` flows above.
 
 ## Run examples
 
