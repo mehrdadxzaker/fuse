@@ -219,6 +219,7 @@ class ExecutionConfig:
     """
 
     mode: str = "single"  # "single" | "fixpoint" | "demand"
+    fixpoint_strategy: str = "synchronous"  # "synchronous" | "semi_naive"
     max_iters: int = 32
     tol: float = 1e-6
     chaining: str = "forward"  # "forward" | "backward"
@@ -233,11 +234,15 @@ class ExecutionConfig:
     jax_enable_xla_cache: bool = False
     jax_cache_dir: Optional[str] = None
     validate_device_transfers: bool = False
+    block_size: Optional[int] = None
 
     def normalized(self) -> "ExecutionConfig":
         mode = self.mode.lower()
         if mode not in {"single", "fixpoint", "demand"}:
             raise ValueError(f"Unsupported execution mode: {self.mode}")
+        fixpoint = (self.fixpoint_strategy or "synchronous").lower()
+        if fixpoint not in {"synchronous", "semi_naive"}:
+            raise ValueError(f"Unsupported fixpoint strategy: {self.fixpoint_strategy}")
         chaining = self.chaining.lower()
         if chaining not in {"forward", "backward"}:
             raise ValueError(f"Unsupported chaining mode: {self.chaining}")
@@ -263,9 +268,15 @@ class ExecutionConfig:
         if cache_dir is not None:
             cache_dir = str(Path(cache_dir).expanduser())
         validate_transfers = bool(self.validate_device_transfers)
+        block_size = self.block_size
+        if block_size is not None:
+            block_size = int(block_size)
+            if block_size <= 0:
+                raise ValueError("block_size must be positive when provided")
         return replace(
             self,
             mode=mode,
+            fixpoint_strategy=fixpoint,
             chaining=chaining,
             projection_strategy=strategy,
             projection_samples=samples,
@@ -277,6 +288,7 @@ class ExecutionConfig:
             jax_enable_xla_cache=jax_enable_cache,
             jax_cache_dir=cache_dir,
             validate_device_transfers=validate_transfers,
+            block_size=block_size,
         )
 
 
@@ -317,7 +329,13 @@ class NumpyRunner:
         self._sources: List[Equation] = []
         self._sinks: List[Equation] = []
         self._groups: List[Tuple[str, List[Equation]]] = []
+        self._group_dependencies: Dict[str, Set[str]] = {}
+        self._group_dependents: Dict[str, Set[str]] = {}
+        self._group_equation_dependencies: Dict[str, List[Set[str]]] = {}
+        self._group_contrib_cache: Dict[str, List[Optional[np.ndarray]]] = {}
+        self._group_meta_cache: Dict[str, List[Optional[Dict[str, Any]]]] = {}
         self._prepare()
+        self._group_dependents = self._build_group_dependents()
         self._reset_rng(self.config)
 
     # Public API ----------------------------------------------------------------
@@ -441,7 +459,25 @@ class NumpyRunner:
             if name in seen:
                 continue
             seen.add(name)
-            self._groups.append((name, group_map[name]))
+            eqs = group_map[name]
+            self._groups.append((name, eqs))
+            deps: Set[str] = set()
+            per_eq: List[Set[str]] = []
+            for item in eqs:
+                eq_deps = _collect_tensor_names(item.rhs)
+                eq_deps.discard(name)
+                per_eq.append(eq_deps)
+                deps.update(eq_deps)
+            self._group_dependencies[name] = deps
+            self._group_equation_dependencies[name] = per_eq
+
+    def _build_group_dependents(self) -> Dict[str, Set[str]]:
+        dependents: Dict[str, Set[str]] = {name: set() for name, _ in self._groups}
+        for name, deps in self._group_dependencies.items():
+            for dep in deps:
+                if dep in dependents:
+                    dependents[dep].add(name)
+        return dependents
 
     def _reset_state(self):
         self.tensors = {}
@@ -449,6 +485,12 @@ class NumpyRunner:
         self._last_temperatures.clear()
         self._active_equation_temperature = None
         self._sig_temperatures.clear()
+        self._group_contrib_cache = {
+            name: [None] * len(eqs) for name, eqs in self._groups
+        }
+        self._group_meta_cache = {
+            name: [None] * len(eqs) for name, eqs in self._groups
+        }
 
     def _reset_rng(self, cfg: ExecutionConfig):
         seed = getattr(cfg, "projection_seed", None)
@@ -729,15 +771,39 @@ class NumpyRunner:
             )
 
     # Equation execution -------------------------------------------------------
+    def _ordered_groups(
+        self,
+        subset: Optional[Set[str]] = None,
+    ) -> List[Tuple[str, List[Equation]]]:
+        if subset is None:
+            sequence = self._groups
+        else:
+            wanted = subset
+            sequence = [(name, eqs) for name, eqs in self._groups if name in wanted]
+        if self.config.chaining == "forward":
+            return list(sequence)
+        return list(reversed(sequence))
+
     def _run_single_pass(self, cfg: ExecutionConfig):
-        groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
-        for name, eqs in groups:
+        for name, eqs in self._ordered_groups():
             self._evaluate_group(
-                name, eqs, iteration=0, tol=cfg.tol, capture_timing=cfg.explain_timings
+                name,
+                eqs,
+                iteration=0,
+                tol=cfg.tol,
+                capture_timing=cfg.explain_timings,
+                changed_inputs=None,
             )
 
     def _run_fixpoint(self, cfg: ExecutionConfig):
-        groups = self._groups if cfg.chaining == "forward" else list(reversed(self._groups))
+        strategy = getattr(cfg, "fixpoint_strategy", "synchronous")
+        if strategy == "semi_naive":
+            self._run_fixpoint_semi_naive(cfg)
+        else:
+            self._run_fixpoint_sync(cfg)
+
+    def _run_fixpoint_sync(self, cfg: ExecutionConfig):
+        groups = self._ordered_groups()
         for iteration in range(cfg.max_iters):
             any_change = False
             for name, eqs in groups:
@@ -747,10 +813,39 @@ class NumpyRunner:
                     iteration=iteration,
                     tol=cfg.tol,
                     capture_timing=cfg.explain_timings,
+                    changed_inputs=None,
                 )
                 any_change = any_change or changed
             if not any_change:
                 break
+
+    def _run_fixpoint_semi_naive(self, cfg: ExecutionConfig):
+        pending: Set[str] = {name for name, _ in self._groups}
+        changed_last_iter: Set[str] = set()
+        for iteration in range(cfg.max_iters):
+            if not pending:
+                break
+            groups = self._ordered_groups(pending)
+            next_pending: Set[str] = set()
+            changed_this_iter: Set[str] = set()
+            changed_inputs = None if iteration == 0 else changed_last_iter
+            for name, eqs in groups:
+                changed = self._evaluate_group(
+                    name,
+                    eqs,
+                    iteration=iteration,
+                    tol=cfg.tol,
+                    capture_timing=cfg.explain_timings,
+                    changed_inputs=changed_inputs,
+                )
+                if changed:
+                    changed_this_iter.add(name)
+                    next_pending.update(self._group_dependents.get(name, set()))
+                    next_pending.add(name)
+            if not changed_this_iter:
+                break
+            changed_last_iter = changed_this_iter
+            pending = next_pending
 
     def _evaluate_group(
         self,
@@ -760,6 +855,7 @@ class NumpyRunner:
         iteration: int,
         tol: float,
         capture_timing: bool,
+        changed_inputs: Optional[Set[str]],
     ) -> bool:
         if not equations:
             return False
@@ -779,11 +875,40 @@ class NumpyRunner:
         )
         self._active_equation_temperature = group_temperature
 
+        eq_dependencies = self._group_equation_dependencies.get(name, [])
+        cache_values = self._group_contrib_cache.setdefault(name, [None] * len(equations))
+        cache_metas = self._group_meta_cache.setdefault(name, [None] * len(equations))
+        if len(cache_values) < len(equations):
+            cache_values.extend([None] * (len(equations) - len(cache_values)))
+        if len(cache_metas) < len(equations):
+            cache_metas.extend([None] * (len(equations) - len(cache_metas)))
+
         try:
-            for eq in equations:
+            for idx, eq in enumerate(equations):
                 start = time.perf_counter() if capture_timing else None
                 self._sig_temperatures.clear()
-                value, meta = self._eval_equation(eq)
+                deps = eq_dependencies[idx] if idx < len(eq_dependencies) else set()
+                can_reuse = (
+                    changed_inputs is not None
+                    and cache_values[idx] is not None
+                    and (not deps or not (deps & changed_inputs))
+                )
+                if can_reuse and cache_metas[idx] is not None:
+                    value_arr = cache_values[idx]  # type: ignore[assignment]
+                    meta = dict(cache_metas[idx])  # type: ignore[arg-type]
+                    meta["cached"] = True
+                    durations.append(0.0 if capture_timing else None)
+                else:
+                    value, meta = self._eval_equation(eq)
+                    value_arr = _to_numpy_array(value)
+                    cache_values[idx] = value_arr
+                    stored_meta = dict(meta)
+                    stored_meta.pop("cached", None)
+                    cache_metas[idx] = stored_meta
+                    if start is not None:
+                        durations.append((time.perf_counter() - start) * 1000.0)
+                    else:
+                        durations.append(None)
                 temps_used = list(self._sig_temperatures)
                 effective_temp = None
                 if temps_used:
@@ -793,13 +918,10 @@ class NumpyRunner:
                 if effective_temp is not None:
                     meta = dict(meta)
                     meta["temperature"] = effective_temp
-                value_arr = _to_numpy_array(value)
+                value_arr = _to_numpy_array(value_arr)
                 contributions.append(value_arr)
-                if start is not None:
-                    durations.append((time.perf_counter() - start) * 1000.0)
-                else:
-                    durations.append(None)
                 metas.append(meta)
+                temps_used = list(self._sig_temperatures)
                 if self._is_boolean_tensor(lhs_name):
                     running_total = (
                         value_arr if running_total is None else np.maximum(running_total, value_arr)
@@ -829,11 +951,15 @@ class NumpyRunner:
         changed = self._assign(lhs_ref, total, tol=tol)
 
         for idx, (eq, meta) in enumerate(zip(equations, metas)):
-            status = (
-                "update"
-                if (changed and idx == len(equations) - 1)
-                else ("unchanged" if (not changed and idx == len(equations) - 1) else "contrib")
-            )
+            cached = bool(meta.get("cached"))
+            if cached:
+                status = "cached"
+            else:
+                status = (
+                    "update"
+                    if (changed and idx == len(equations) - 1)
+                    else ("unchanged" if (not changed and idx == len(equations) - 1) else "contrib")
+                )
             self._log_equation(
                 eq,
                 meta,
@@ -1110,7 +1236,12 @@ class NumpyRunner:
         if projection not in {"sum", "max", "mean"}:
             raise ValueError(f"Unsupported projection op '{projection}'")
 
-        base_equation, projected, factor_order = _normalized_einsum(term, lhs)
+        (
+            base_equation,
+            projected,
+            factor_order,
+            base_index_map,
+        ) = _normalized_einsum(term, lhs)
         evaluated: List[Any] = []
         pending: List[Tuple[int, IndexFunction]] = []
         for idx, factor in enumerate(term.factors):
@@ -1139,9 +1270,15 @@ class NumpyRunner:
 
         extended_equation: Optional[str] = None
         extended_order: Optional[List[int]] = None
+        extended_index_map: Optional[Dict[str, str]] = None
         if need_extended:
             extended_lhs = self._build_extended_lhs(lhs, projected)
-            extended_equation, _, extended_order = _normalized_einsum(term, extended_lhs)
+            (
+                extended_equation,
+                _,
+                extended_order,
+                extended_index_map,
+            ) = _normalized_einsum(term, extended_lhs)
 
         def _array_shapes_and_sizes(
             arrays: Sequence[np.ndarray],
@@ -1155,9 +1292,14 @@ class NumpyRunner:
             return shapes, itemsizes
 
         if use_mc:
-            if extended_equation is None:
+            if extended_equation is None or extended_index_map is None:
                 extended_lhs = self._build_extended_lhs(lhs, projected)
-                extended_equation, _, extended_order = _normalized_einsum(term, extended_lhs)
+                (
+                    extended_equation,
+                    _,
+                    extended_order,
+                    extended_index_map,
+                ) = _normalized_einsum(term, extended_lhs)
             extended_arrays = _ordered_arrays(extended_order or factor_order)
             path = np.einsum_path(extended_equation, *extended_arrays, optimize="optimal")[0]
             raw = np.einsum(extended_equation, *extended_arrays, optimize=path)
@@ -1178,29 +1320,59 @@ class NumpyRunner:
             )
             meta.update(stats)
         elif projection != "sum" and projected:
-            if extended_equation is None:
+            if extended_equation is None or extended_index_map is None:
                 extended_lhs = self._build_extended_lhs(lhs, projected)
-                extended_equation, _, extended_order = _normalized_einsum(term, extended_lhs)
+                (
+                    extended_equation,
+                    _,
+                    extended_order,
+                    extended_index_map,
+                ) = _normalized_einsum(term, extended_lhs)
             extended_arrays = _ordered_arrays(extended_order or factor_order)
             path = np.einsum_path(extended_equation, *extended_arrays, optimize="optimal")[0]
-            raw = np.einsum(extended_equation, *extended_arrays, optimize=path)
-            result = self._reduce_extended_raw(
-                raw,
-                axes_start=len(lhs_output_indices),
-                projection=projection,
+            block_size = getattr(self.config, "block_size", None)
+            use_blocking = (
+                block_size is not None
+                and projected
+                and axis_lengths.get(projected[0], 0) > block_size
             )
-            meta = {
-                "einsum": extended_equation,
-                "projected": projected,
-                "projection": projection,
-            }
+            if use_blocking:
+                result, block_meta = self._einsum_projected_chunked(
+                    equation=extended_equation,
+                    arrays=extended_arrays,
+                    projected=projected,
+                    axis_lengths=axis_lengths,
+                    axes_start=len(lhs_output_indices),
+                    projection=projection,
+                    index_map=extended_index_map,
+                    block_size=int(block_size),
+                    path=path,
+                )
+                meta = {
+                    "einsum": extended_equation,
+                    "projected": projected,
+                    "projection": projection,
+                }
+                meta.update(block_meta)
+            else:
+                raw = np.einsum(extended_equation, *extended_arrays, optimize=path)
+                result = self._reduce_extended_raw(
+                    raw,
+                    axes_start=len(lhs_output_indices),
+                    projection=projection,
+                )
+                meta = {
+                    "einsum": extended_equation,
+                    "projected": projected,
+                    "projection": projection,
+                }
             shapes, itemsizes = _array_shapes_and_sizes(extended_arrays)
             stats = compute_einsum_stats(
                 extended_equation,
                 shapes,
                 itemsizes,
-                tuple(int(dim) for dim in raw.shape),
-                int(raw.dtype.itemsize),
+                tuple(int(dim) for dim in result.shape),
+                int(result.dtype.itemsize),
             )
             meta.update(stats)
         else:
@@ -1246,6 +1418,87 @@ class NumpyRunner:
             dotted_axes=dotted_axes,
             rolling=rolling,
         )
+
+    def _einsum_projected_chunked(
+        self,
+        *,
+        equation: str,
+        arrays: Sequence[np.ndarray],
+        projected: Sequence[str],
+        axis_lengths: Dict[str, int],
+        axes_start: int,
+        projection: str,
+        index_map: Dict[str, str],
+        block_size: int,
+        path,
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        if not projected:
+            raise ValueError("Chunked einsum requires at least one projected index")
+        block_index = projected[0]
+        block_letter = index_map.get(block_index)
+        if block_letter is None:
+            raise ValueError(f"Missing einsum index mapping for '{block_index}'")
+        block_dim = axis_lengths.get(block_index)
+        if block_dim is None:
+            raise ValueError(f"Unknown axis length for projected index '{block_index}'")
+        if block_dim <= 0:
+            zero_shape = arrays[0].shape[: axes_start] if arrays else ()
+            return np.zeros(zero_shape, dtype=np.float32), {"blocked": {"axis": block_index}}
+        block = max(1, min(int(block_size), int(block_dim)))
+        inputs, output = equation.split("->")
+        input_specs = inputs.split(",")
+        other_volume = 1
+        for idx_name in projected[1:]:
+            other_dim = axis_lengths.get(idx_name, 1)
+            other_volume *= max(1, int(other_dim))
+
+        total_sum: Optional[np.ndarray] = None
+        total_result: Optional[np.ndarray] = None
+        total_count = 0
+        chunk_count = 0
+        for start in range(0, int(block_dim), block):
+            stop = min(start + block, int(block_dim))
+            chunk_count += 1
+            sliced_arrays: List[np.ndarray] = []
+            for arr, spec in zip(arrays, input_specs):
+                if block_letter in spec:
+                    axis = spec.index(block_letter)
+                    slicer = [slice(None)] * arr.ndim
+                    slicer[axis] = slice(start, stop)
+                    sliced_arrays.append(arr[tuple(slicer)])
+                else:
+                    sliced_arrays.append(arr)
+            chunk_raw = np.einsum(equation, *sliced_arrays, optimize=path)
+            if projection == "mean":
+                chunk_sum = self._reduce_extended_raw(chunk_raw, axes_start, projection="sum")
+                total_sum = chunk_sum if total_sum is None else total_sum + chunk_sum
+                total_count += (stop - start) * other_volume
+            elif projection == "max":
+                chunk_reduced = self._reduce_extended_raw(chunk_raw, axes_start, projection="max")
+                total_result = (
+                    chunk_reduced if total_result is None else np.maximum(total_result, chunk_reduced)
+                )
+            else:
+                chunk_reduced = self._reduce_extended_raw(chunk_raw, axes_start, projection="sum")
+                total_result = chunk_reduced if total_result is None else total_result + chunk_reduced
+        if projection == "mean":
+            if total_sum is None or total_count == 0:
+                raise ValueError("Unable to compute mean for empty projection")
+            result = total_sum / float(total_count)
+        else:
+            if total_result is None:
+                raise ValueError("Chunked einsum produced no result")
+            result = total_result
+        meta = {
+            "blocked": {
+                "axis": block_index,
+                "chunks": int(chunk_count),
+                "block_size": int(block),
+            }
+        }
+        if projection == "mean":
+            meta["blocked"]["elements"] = int(total_count)
+        return result, meta
 
     def _reduce_extended_raw(
         self,
@@ -1726,6 +1979,7 @@ class DemandNumpyRunner(NumpyRunner):
                     iteration=iteration,
                     tol=self.config.tol,
                     capture_timing=self.config.explain_timings,
+                    changed_inputs=None,
                 )
                 any_change = any_change or changed
             if not any_change:
@@ -1920,7 +2174,9 @@ def _canonical_factor_order(term: Term, mapping: Dict[str, str]) -> List[int]:
     return [pos for (_, _, _, _, pos) in keyed]
 
 
-def _normalized_einsum(term: Term, lhs: Optional[TensorRef]) -> Tuple[str, List[str], List[int]]:
+def _normalized_einsum(
+    term: Term, lhs: Optional[TensorRef]
+) -> Tuple[str, List[str], List[int], Dict[str, str]]:
     lhs_indices = [idx for idx in lhs.indices if idx not in lhs.rolling] if lhs else []
     all_indices: List[str] = []
     for factor in term.factors:
@@ -1945,4 +2201,4 @@ def _normalized_einsum(term: Term, lhs: Optional[TensorRef]) -> Tuple[str, List[
     equation = ",".join(inputs)
     if output:
         equation += f"->{output}"
-    return equation, projected, factor_order
+    return equation, projected, factor_order, mapping

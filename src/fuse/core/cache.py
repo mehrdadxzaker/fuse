@@ -1,8 +1,10 @@
 import hashlib
 import importlib
 import json
+import os
 import re
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -15,6 +17,7 @@ from .exceptions import CacheError
 from .policies import RuntimePolicies
 
 CACHE_VERSION = "2"
+_SHA256_KEY_RE = re.compile(r"[0-9a-f]{64}")
 
 
 def compute_program_hash(src: str) -> str:
@@ -35,6 +38,10 @@ class CacheManager:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, backend: str, key: str) -> Path:
+        if not _SHA256_KEY_RE.fullmatch(key):
+            raise CacheError(
+                f"Invalid cache key '{key}'. Expected 64-character lowercase hex digest."
+            )
         safe_backend = backend.replace("/", "_")
         return self.root / safe_backend / key
 
@@ -183,18 +190,18 @@ def _load_npz(path: Path) -> Dict[str, np.ndarray]:
 
 
 def _write_npz(path: Path, arrays: Dict[str, np.ndarray]) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(tmp_path, **arrays)
-    tmp_path.replace(path)
+    os.replace(tmp_path, path)
 
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     with tmp_path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, sort_keys=True)
-    tmp_path.replace(path)
+    os.replace(tmp_path, path)
 
 
 def _module_version(name: str) -> Optional[str]:

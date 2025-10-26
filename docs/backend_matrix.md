@@ -10,12 +10,12 @@ issues).
 | Gradient support                   | ✅ Symbolic gradients via `generate_gradient_program`        | ⚠️ Autograd integration limited; FX trace exposes graph for external autodiff      | ⚠️ Limited: JIT works for many ops, but gradients rely on NumPy path |
 | Streaming / rolling indices        | ✅ Demand + fixpoint modes                                   | ❌ Not yet supported (forced NumPy fallback)                                        | ⚠️ Partially supported (compiled as pure JAX where possible) |
 | Boolean Datalog operators          | ✅ Supported                                                  | ⚠️ Falls back to NumPy                                                              | ⚠️ Requires NumPy fallback                                 |
-| Monte Carlo projection             | ✅ `ExecutionConfig(projection_strategy="monte_carlo")`      | ❌ Not implemented                                                                   | ❌ Not implemented                                         |
+| Monte Carlo projection             | ✅ `ExecutionConfig(projection_strategy="monte_carlo")`      | 🧩 Falls back to NumPy evaluator                                                     | 🧩 Falls back to NumPy evaluator                           |
 | Dtype support                      | `float32` default, `float16`/`bfloat16` via manual casts     | Input tensors follow Torch dtype; internal ops use `float32` by default             | `float32` default; respects JAX dtype policy               |
 | Memory-mapped sources (`.npy/.npz`)| ✅ Respects `RuntimePolicies` (with strict mmap option)      | ✅ Inherits manifest handling from shared policy layer                              | ✅ Same manifest layer                                     |
 | Device selection                   | CPU only                                                     | CPU/GPU via Torch’s device strings (`cpu`,`cuda`,`mps`, …)                          | CPU/GPU/TPU via `ExecutionConfig(device="...")`            |
 | FX / export tooling                | N/A                                                          | ✅ FX graph available; packaging helpers in `fuse.interop`                          | ⚠️ Experimental ONNX export via NumPy fallback             |
-| Known constraints                  | —                                                            | *Demand mode unsupported*<br>*Monte Carlo unsupported*<br>*Streaming unsupported*   | *Requires JAX installation*<br>*Boolean logic falls back*  |
+| Known constraints                  | —                                                            | *Demand mode & Monte Carlo fall back to NumPy*<br>*Streaming unsupported*           | *Demand mode & Monte Carlo fall back to NumPy*<br>*Boolean logic falls back*  |
 
 Legend:
 

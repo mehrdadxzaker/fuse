@@ -35,6 +35,13 @@ uv sync --extra dev
 
 You can swap in other extras (e.g., `--extra torch --extra jax` or `--all-extras`) to mirror the `pip install fuse-ai[...]` flows above.
 
+## Runtime inputs
+
+- All backends accept source tensors at call time via `runner.run(inputs={"Source": array})`; file paths remain as defaults when no runtime tensors are provided.
+- Torch and JAX backends currently defer demand-driven execution (`mode="demand"`) and Monte-Carlo projection to the NumPy engine, falling back to the reference evaluator in those configurations.
+- Torch FX exports keep file-backed defaults baked into the traced graph today; prefer `runner.run` when you need to feed dynamic tensors. The JAX `runner.xla_callable` accepts pytrees of runtime inputs.
+- The NumPy runner now supports `ExecutionConfig(fixpoint_strategy="semi_naive")` for delta-driven fixpoint scheduling plus optional blocked einsums via `ExecutionConfig(block_size=...)`.
+
 ## Run examples
 
 ```bash

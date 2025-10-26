@@ -11,6 +11,7 @@ from ..core.builtins import read_tensor_from_file, write_tensor_to_file
 from ..core.cache import CacheManager
 from ..core.evaluator_numpy import (
     ExecutionConfig,
+    DemandNumpyRunner,
     NumpyRunner,
     _factor_indices,
     _first_tensor_ref,
@@ -299,9 +300,9 @@ def compile(
     if cfg.device != device_spec:
         cfg = replace(cfg, device=device_spec).normalized()
     if cfg.mode == "demand":
-        raise ValueError("JAX backend does not yet support demand-driven execution mode")
+        return DemandNumpyRunner(program.ir, config=cfg, policies=policy_obj)
     if cfg.projection_strategy == "monte_carlo":
-        raise ValueError("JAX backend does not yet support Monte Carlo projection strategy")
+        return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
     policy_obj = policies or RuntimePolicies()
     _maybe_enable_compilation_cache(cfg)
 
@@ -363,6 +364,7 @@ class JaxRunner:
         self._sinks: List[Equation] = []
         self._groups: List[Tuple[str, List[Equation]]] = []
         self._prepare()
+        self.input_names: List[str] = [src.lhs.name for src in self._sources]
 
     # Public API -------------------------------------------------------------
     def __call__(
@@ -848,7 +850,7 @@ class JaxRunner:
         if projection not in {"sum", "max", "mean"}:
             raise ValueError(f"Unsupported projection op '{projection}'")
 
-        base_equation, projected, factor_order = _normalized_einsum(term, lhs)
+        base_equation, projected, factor_order, _ = _normalized_einsum(term, lhs)
         evaluated: List[Optional[Any]] = []
         pending: List[Tuple[int, IndexFunction]] = []
         for idx, factor in enumerate(term.factors):
@@ -900,7 +902,7 @@ class JaxRunner:
                 dotted_axes=dotted_axes,
                 rolling=rolling,
             )
-            extended_equation, _, extended_order = _normalized_einsum(term, extended_lhs)
+            extended_equation, _, extended_order, _ = _normalized_einsum(term, extended_lhs)
             extended_arrays = _ordered_arrays(extended_order or factor_order)
             raw = jnp.einsum(extended_equation, *extended_arrays)
             shapes, sizes = _shapes_and_sizes(extended_arrays)
