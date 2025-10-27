@@ -34,6 +34,7 @@ dev = [
     "hypothesis>=6.92",
     "ruff>=0.6",
     "mypy>=1.11",
+    "typing_extensions>=4.6",
     "types-requests",
 ]
 
