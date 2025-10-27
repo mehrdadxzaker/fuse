@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from lark import Lark, Token, Transformer, Tree, v_args
 from lark.exceptions import LarkError, UnexpectedInput
@@ -244,6 +244,32 @@ class FuseTransformer(Transformer):
             if dotted:
                 dotted_axes.append(axis_name)
             specs.append(IndexSpec(axis=axis_name, offset=offset, slice=slice_spec))
+
+        lower_name = name_token.value.lower()
+        if suffix.is_paren and lower_name in INDEX_FUNCTION_NAMES:
+            if len(specs) != 1:
+                self._error_token(
+                    suffix.tokens[0], f"{name_token.value} requires exactly one axis"
+                )
+            if dotted_axes:
+                self._error_token(
+                    suffix.tokens[0],
+                    f"{name_token.value} axis cannot include dotted indices",
+                )
+            spec = specs[0]
+            if spec.slice is not None:
+                self._error_token(
+                    suffix.tokens[0], f"{name_token.value} axis does not support slices"
+                )
+            if spec.offset != 0:
+                self._error_token(
+                    suffix.tokens[0], f"{name_token.value} axis does not support offsets"
+                )
+            if spec.axis.startswith("*"):
+                self._error_token(
+                    suffix.tokens[0], f"{name_token.value} axis cannot be streaming"
+                )
+            return IndexFunction(name=lower_name, axis=spec.axis)
 
         return TensorRef(
             name=name_token.value,
@@ -573,6 +599,89 @@ def _clone_tensor_ref(ref: TensorRef) -> TensorRef:
     )
 
 
+def _slice_signature(spec: Optional[SliceSpec]) -> Optional[Tuple[Any, Any, Any]]:
+    if spec is None:
+        return None
+    return (spec.start, spec.stop, spec.step)
+
+
+def _tensor_signature(ref: TensorRef) -> Tuple[Any, ...]:
+    return (
+        ref.name,
+        tuple(ref.indices),
+        tuple(ref.dotted_axes),
+        tuple(sorted(ref.rolling.items())),
+        tuple(
+            (
+                spec.axis,
+                spec.offset,
+                _slice_signature(spec.slice),
+            )
+            for spec in ref.index_specs
+        ),
+        ref.is_paren,
+    )
+
+
+def _object_signature(value: Any) -> Any:
+    if isinstance(value, (TensorRef, Term, FuncCall, IndexFunction)):
+        return _expr_signature(value)
+    if isinstance(value, tuple):
+        return ("tuple", tuple(_object_signature(item) for item in value))
+    if isinstance(value, list):
+        return ("list", tuple(_object_signature(item) for item in value))
+    if isinstance(value, dict):
+        return (
+            "dict",
+            tuple(sorted((key, _object_signature(val)) for key, val in value.items())),
+        )
+    return value
+
+
+def _expr_signature(expr: Any) -> Any:
+    if expr is None:
+        return None
+    if isinstance(expr, TensorRef):
+        return ("tensor", _tensor_signature(expr))
+    if isinstance(expr, Term):
+        return ("term", tuple(_expr_signature(factor) for factor in expr.factors))
+    if isinstance(expr, FuncCall):
+        return (
+            "func",
+            expr.name,
+            _object_signature(expr.arg),
+            tuple(
+                (key, _object_signature(val))
+                for key, val in sorted(expr.kwargs.items())
+            ),
+        )
+    if isinstance(expr, IndexFunction):
+        return ("index_fn", expr.name, expr.axis)
+    if isinstance(expr, tuple):
+        return ("tuple", tuple(_object_signature(item) for item in expr))
+    if isinstance(expr, list):
+        return ("list", tuple(_object_signature(item) for item in expr))
+    if isinstance(expr, dict):
+        return (
+            "dict",
+            tuple(sorted((key, _object_signature(val)) for key, val in expr.items())),
+        )
+    return expr
+
+
+def _equation_signature(eq: Equation) -> Tuple[Any, ...]:
+    return (
+        eq.is_source,
+        eq.is_sink,
+        eq.export,
+        eq.projection,
+        eq.src_file,
+        eq.sink_file,
+        _tensor_signature(eq.lhs),
+        _expr_signature(eq.rhs),
+    )
+
+
 def _build_program_ir(nodes: ProgramNodes) -> ProgramIR:
     equations: List[Equation] = []
 
@@ -631,7 +740,15 @@ def _build_program_ir(nodes: ProgramNodes) -> ProgramIR:
             raise ParseError("Unknown statement in program")
 
     exports = [node.name for node in nodes.exports]
-    return ProgramIR(equations=equations, exports=exports)
+    seen_signatures = set()
+    deduped: List[Equation] = []
+    for eq in equations:
+        signature = _equation_signature(eq)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        deduped.append(eq)
+    return ProgramIR(equations=deduped, exports=exports)
 
 
 def parse(program_str: str) -> ProgramIR:
