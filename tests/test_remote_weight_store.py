@@ -1,9 +1,9 @@
 import io
 from typing import Any, Dict, Mapping, Optional, Tuple
+from urllib import error as urllib_error
 
 import numpy as np
 import pytest
-from urllib import error as urllib_error
 
 from fuse.core.policies import HTTPWeightStore, S3WeightStore
 

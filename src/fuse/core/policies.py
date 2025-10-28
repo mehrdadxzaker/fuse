@@ -27,6 +27,7 @@ from urllib import request as urllib_request
 
 import numpy as np
 
+from .builtins import SparseBoolTensor
 from .exceptions import BackendError
 
 ArrayLike = Union[np.ndarray, Sequence[float], Sequence[int], float, int]
@@ -1733,6 +1734,13 @@ class RuntimePolicies:
             managed_lora = payload.lora is not None and payload.lora.adapter is not None
         elif isinstance(payload, np.ndarray):
             materialized = payload
+        elif isinstance(payload, SparseBoolTensor):
+            materialized = payload.to_dense()
+        elif hasattr(payload, "to_dense"):
+            try:
+                materialized = payload.to_dense()
+            except Exception:  # pragma: no cover - fallback for unexpected payloads
+                materialized = payload
 
         if backend == "numpy":
             arr = np.asarray(materialized)
