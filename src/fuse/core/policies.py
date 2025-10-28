@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import time
+import uuid
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +21,9 @@ from typing import (
     Tuple,
     Union,
 )
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 import numpy as np
 
@@ -1074,6 +1081,620 @@ class ManifestWeightStore(WeightStore):
             "active_adapters": dict(self._active_adapters),
             "weights": weights,
         }
+
+
+@dataclass
+class _RemoteCacheEntry:
+    name: str
+    base_path: Path
+    data_file: str
+    size: int
+    etag: Optional[str]
+    last_used: float
+    spec_hash: str
+
+    @property
+    def data_path(self) -> Path:
+        return self.base_path / self.data_file
+
+    @property
+    def meta_path(self) -> Path:
+        return self.base_path / "meta.json"
+
+
+@dataclass
+class _RemoteObjectMetadata:
+    etag: Optional[str]
+    size: Optional[int]
+
+
+def _normalize_etag(value: Optional[Any]) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.startswith("W/"):
+        text = text[2:].strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        text = text[1:-1]
+    return text or None
+
+
+def _remote_spec_digest(spec: Mapping[str, Any]) -> str:
+    sanitized = _sanitize_metadata(spec)
+    payload = json.dumps(sanitized, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    with tmp.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, separators=(",", ":"), sort_keys=True)
+    os.replace(tmp, path)
+
+
+def _remove_tree(path: Path) -> None:
+    shutil.rmtree(path, ignore_errors=True)
+
+
+class _RemoteWeightStoreBase(WeightStore):
+    def __init__(
+        self,
+        weights: Union[Mapping[str, Mapping[str, Any]], Sequence[Mapping[str, Any]]],
+        *,
+        cache_dir: Union[str, Path],
+        max_bytes: Optional[int] = 2 * 1024**3,
+        mmap_mode: bool = True,
+        mmap_threshold_bytes: Optional[int] = _DEFAULT_NPZ_MMAP_THRESHOLD,
+        strict: bool = False,
+    ):
+        self._entries = self._normalize_weights(weights)
+        if not self._entries:
+            raise ValueError("Remote weight store requires at least one weight specification")
+        for name, spec in self._entries.items():
+            self._validate_spec(name, spec)
+
+        self.cache_dir = Path(cache_dir).expanduser().resolve()
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if max_bytes is None:
+            self.cache_bytes: Optional[int] = None
+        else:
+            budget = int(max_bytes)
+            if budget <= 0:
+                raise ValueError("Cache budget must be positive")
+            self.cache_bytes = budget
+        self.mmap_mode = bool(mmap_mode)
+        self.mmap_threshold = (
+            int(mmap_threshold_bytes) if mmap_threshold_bytes is not None else None
+        )
+        self.strict_mode = bool(strict)
+
+        self._spec_hashes: Dict[str, str] = {
+            name: _remote_spec_digest(spec) for name, spec in self._entries.items()
+        }
+        self._cache_keys: Dict[str, str] = {
+            name: hashlib.sha256(f"{name}:{self._spec_hashes[name]}".encode("utf-8")).hexdigest()
+            for name in self._entries
+        }
+        self._records: Dict[str, _RemoteCacheEntry] = {}
+        self._lru: OrderedDict[str, _RemoteCacheEntry] = OrderedDict()
+        self._resident_bytes = 0
+
+        self._load_existing_cache()
+
+    # Lifecycle helpers ------------------------------------------------------
+    @staticmethod
+    def _normalize_weights(
+        weights: Union[Mapping[str, Mapping[str, Any]], Sequence[Mapping[str, Any]]],
+    ) -> Dict[str, Dict[str, Any]]:
+        result: Dict[str, Dict[str, Any]] = {}
+        if isinstance(weights, Mapping):
+            iterator = weights.items()
+        else:
+            normalized: List[Tuple[str, Mapping[str, Any]]] = []
+            for entry in weights:
+                if not isinstance(entry, Mapping):
+                    raise TypeError("Weight entries must be mappings")
+                name = entry.get("name")
+                if not isinstance(name, str) or not name:
+                    raise ValueError("Weight entry must include a non-empty 'name'")
+                spec = {k: v for k, v in entry.items() if k != "name"}
+                normalized.append((name, spec))
+            iterator = normalized
+        for name, spec in iterator:
+            if not isinstance(name, str) or not name:
+                raise ValueError("Weight names must be non-empty strings")
+            if name in result:
+                raise ValueError(f"Duplicate weight entry '{name}'")
+            if not isinstance(spec, Mapping):
+                raise TypeError(f"Weight '{name}' specification must be a mapping")
+            result[name] = dict(spec)
+        return result
+
+    def _validate_spec(self, name: str, spec: Mapping[str, Any]) -> None:
+        del name, spec
+
+    def _cache_dir_for(self, name: str) -> Path:
+        key = self._cache_keys[name]
+        return self.cache_dir / key[:2] / key
+
+    def _load_existing_cache(self) -> None:
+        if not self.cache_dir.exists():
+            return
+        recovered: Dict[str, _RemoteCacheEntry] = {}
+        for meta_path in self.cache_dir.rglob("meta.json"):
+            try:
+                with meta_path.open("r", encoding="utf-8") as fh:
+                    meta = json.load(fh)
+            except Exception:
+                _remove_tree(meta_path.parent)
+                continue
+            name = meta.get("name")
+            if not isinstance(name, str) or name not in self._entries:
+                _remove_tree(meta_path.parent)
+                continue
+            spec_hash = meta.get("spec_hash")
+            if spec_hash != self._spec_hashes[name]:
+                _remove_tree(meta_path.parent)
+                continue
+            expected_dir = self._cache_dir_for(name)
+            if meta_path.parent != expected_dir:
+                _remove_tree(meta_path.parent)
+                continue
+            data_file = meta.get("data_file")
+            if not isinstance(data_file, str) or not data_file:
+                _remove_tree(meta_path.parent)
+                continue
+            data_path = meta_path.parent / data_file
+            if not data_path.exists():
+                _remove_tree(meta_path.parent)
+                continue
+            try:
+                size = int(meta.get("size"))
+            except (TypeError, ValueError):
+                try:
+                    size = int(data_path.stat().st_size)
+                except OSError:
+                    _remove_tree(meta_path.parent)
+                    continue
+            try:
+                last_used = float(meta.get("last_used"))
+            except (TypeError, ValueError):
+                last_used = 0.0
+            etag = _normalize_etag(meta.get("etag"))
+            entry = _RemoteCacheEntry(
+                name=name,
+                base_path=meta_path.parent,
+                data_file=data_file,
+                size=int(size),
+                etag=etag,
+                last_used=last_used,
+                spec_hash=str(spec_hash),
+            )
+            recovered[name] = entry
+
+        ordered = sorted(recovered.values(), key=lambda item: item.last_used)
+        for entry in ordered:
+            self._records[entry.name] = entry
+            self._lru[entry.name] = entry
+            self._resident_bytes += entry.size
+
+    # Core operations --------------------------------------------------------
+    def resolve(self, name: str) -> np.ndarray:
+        if name not in self._entries:
+            raise KeyError(f"Weight '{name}' not registered with remote store")
+        spec = self._entries[name]
+        spec_hash = self._spec_hashes[name]
+        entry = self._records.get(name)
+        if entry is not None and entry.spec_hash != spec_hash:
+            self._remove_entry(name)
+            entry = None
+
+        metadata = self._fetch_remote_metadata(name, spec)
+        remote_etag = _normalize_etag(metadata.etag)
+        expected_etag = _normalize_etag(spec.get("etag"))
+        if expected_etag is not None:
+            if remote_etag is None:
+                self._remove_entry(name)
+                raise RuntimeError(
+                    f"Weight '{name}' missing remote ETag header required for validation"
+                )
+            if remote_etag != expected_etag:
+                self._remove_entry(name)
+                raise RuntimeError(
+                    f"Weight '{name}' failed ETag validation "
+                    f"(expected '{expected_etag}', got '{remote_etag}')"
+                )
+        effective_etag = remote_etag or expected_etag
+
+        if entry is not None:
+            if entry.data_path.exists() and (
+                effective_etag is None or entry.etag == effective_etag
+            ):
+                entry.etag = effective_etag
+                self._touch_entry(entry)
+                return self._materialize(entry, spec)
+            self._remove_entry(name)
+            entry = None
+
+        base_path = self._cache_dir_for(name)
+        base_path.mkdir(parents=True, exist_ok=True)
+        data_file = self._local_filename(name, spec)
+        target_path = base_path / data_file
+        self._download_remote(name, spec, target_path, metadata)
+        try:
+            size = int(target_path.stat().st_size)
+        except OSError as exc:
+            raise RuntimeError(f"Failed to load downloaded weight '{name}': {exc}") from exc
+        if self.cache_bytes is not None and size > self.cache_bytes:
+            target_path.unlink(missing_ok=True)
+            _remove_tree(base_path)
+            raise RuntimeError(
+                f"Weight '{name}' size {size} exceeds cache budget of {self.cache_bytes} bytes"
+            )
+        entry = _RemoteCacheEntry(
+            name=name,
+            base_path=base_path,
+            data_file=data_file,
+            size=size,
+            etag=effective_etag,
+            last_used=self._now(),
+            spec_hash=spec_hash,
+        )
+        self._register_entry(entry)
+        self._ensure_budget(exclude=name)
+        return self._materialize(entry, spec)
+
+    def fingerprint(self) -> Dict[str, Any]:
+        entries = []
+        for name in sorted(self._entries):
+            spec = self._entries[name]
+            cached = self._records.get(name)
+            entries.append(
+                {
+                    "name": name,
+                    "spec": _sanitize_metadata(spec),
+                    "cached": cached is not None and cached.data_path.exists(),
+                    "etag": cached.etag if cached is not None else None,
+                    "size": cached.size if cached is not None else None,
+                }
+            )
+        return {
+            "type": self._fingerprint_kind(),
+            "cache_dir": str(self.cache_dir),
+            "cache_bytes": self.cache_bytes,
+            "resident_bytes": self._resident_bytes,
+            **self._fingerprint_extra(),
+            "entries": entries,
+        }
+
+    # Abstract hooks ---------------------------------------------------------
+    def _fingerprint_kind(self) -> str:
+        raise NotImplementedError
+
+    def _fingerprint_extra(self) -> Dict[str, Any]:
+        return {}
+
+    def _fetch_remote_metadata(self, name: str, spec: Mapping[str, Any]) -> _RemoteObjectMetadata:
+        raise NotImplementedError
+
+    def _download_remote(
+        self,
+        name: str,
+        spec: Mapping[str, Any],
+        target_path: Path,
+        metadata: _RemoteObjectMetadata,
+    ) -> None:
+        raise NotImplementedError
+
+    def _local_filename(self, name: str, spec: Mapping[str, Any]) -> str:
+        raise NotImplementedError
+
+    # Internal helpers -------------------------------------------------------
+    def _register_entry(self, entry: _RemoteCacheEntry) -> None:
+        existing = self._records.get(entry.name)
+        if existing is not None:
+            self._resident_bytes = max(0, self._resident_bytes - existing.size)
+        self._records[entry.name] = entry
+        self._lru.pop(entry.name, None)
+        self._lru[entry.name] = entry
+        self._resident_bytes += entry.size
+        self._write_metadata(entry)
+
+    def _touch_entry(self, entry: _RemoteCacheEntry) -> None:
+        entry.last_used = self._now()
+        self._lru.pop(entry.name, None)
+        self._lru[entry.name] = entry
+        self._write_metadata(entry)
+
+    def _write_metadata(self, entry: _RemoteCacheEntry) -> None:
+        payload = {
+            "name": entry.name,
+            "etag": entry.etag,
+            "size": entry.size,
+            "last_used": entry.last_used,
+            "spec_hash": entry.spec_hash,
+            "data_file": entry.data_file,
+        }
+        _write_json_atomic(entry.meta_path, payload)
+
+    def _ensure_budget(self, *, exclude: Optional[str] = None) -> None:
+        if self.cache_bytes is None:
+            return
+        if self._resident_bytes <= self.cache_bytes:
+            return
+        for name in list(self._lru.keys()):
+            if self._resident_bytes <= self.cache_bytes:
+                break
+            if name == exclude:
+                continue
+            self._remove_entry(name)
+        if self._resident_bytes > self.cache_bytes and exclude is not None:
+            entry = self._records.get(exclude)
+            if entry is not None:
+                size = entry.size
+                self._remove_entry(exclude)
+                raise RuntimeError(
+                    f"Cache budget of {self.cache_bytes} bytes too small for weight "
+                    f"'{exclude}' (size {size})"
+                )
+
+    def _remove_entry(self, name: str) -> None:
+        entry = self._records.pop(name, None)
+        if entry is None:
+            return
+        self._lru.pop(name, None)
+        self._resident_bytes = max(0, self._resident_bytes - entry.size)
+        _remove_tree(entry.base_path)
+
+    def _materialize(self, entry: _RemoteCacheEntry, spec: Mapping[str, Any]) -> np.ndarray:
+        dtype = spec.get("dtype")
+        resolved_dtype = np.dtype(dtype) if dtype is not None else None
+        return _load_array_from_path(
+            entry.data_path,
+            dtype=resolved_dtype,
+            mmap=self.mmap_mode,
+            mmap_threshold=self.mmap_threshold,
+            strict=self.strict_mode,
+        )
+
+    @staticmethod
+    def _now() -> float:
+        return time.time()
+
+
+class HTTPWeightStore(_RemoteWeightStoreBase):
+    def __init__(
+        self,
+        weights: Union[Mapping[str, Mapping[str, Any]], Sequence[Mapping[str, Any]]],
+        *,
+        cache_dir: Union[str, Path],
+        max_bytes: Optional[int] = 2 * 1024**3,
+        mmap_mode: bool = True,
+        mmap_threshold_bytes: Optional[int] = _DEFAULT_NPZ_MMAP_THRESHOLD,
+        strict: bool = False,
+        timeout: float = 30.0,
+        headers: Optional[Mapping[str, str]] = None,
+    ):
+        self._timeout = float(timeout)
+        self._base_headers = {str(k): str(v) for k, v in (headers or {}).items()}
+        super().__init__(
+            weights,
+            cache_dir=cache_dir,
+            max_bytes=max_bytes,
+            mmap_mode=mmap_mode,
+            mmap_threshold_bytes=mmap_threshold_bytes,
+            strict=strict,
+        )
+
+    def _fingerprint_kind(self) -> str:
+        return "http"
+
+    def _fingerprint_extra(self) -> Dict[str, Any]:
+        return {"timeout": self._timeout}
+
+    def _validate_spec(self, name: str, spec: Mapping[str, Any]) -> None:
+        url = spec.get("url")
+        if not isinstance(url, str) or not url:
+            raise ValueError(f"HTTP weight '{name}' must include a 'url'")
+        if spec.get("headers") is not None and not isinstance(spec["headers"], Mapping):
+            raise ValueError(f"HTTP weight '{name}' headers must be a mapping")
+
+    def _local_filename(self, name: str, spec: Mapping[str, Any]) -> str:
+        del name
+        url = str(spec["url"])
+        parsed = urllib_parse.urlparse(url)
+        suffix = Path(parsed.path).suffix
+        if not suffix:
+            suffix = ".npy"
+        return f"payload{suffix}"
+
+    def _build_headers(self, spec: Mapping[str, Any]) -> Dict[str, str]:
+        headers = dict(self._base_headers)
+        extra = spec.get("headers")
+        if isinstance(extra, Mapping):
+            headers.update({str(k): str(v) for k, v in extra.items()})
+        return headers
+
+    def _fetch_remote_metadata(self, name: str, spec: Mapping[str, Any]) -> _RemoteObjectMetadata:
+        url = str(spec["url"])
+        headers = self._build_headers(spec)
+        request_obj = urllib_request.Request(url, method="HEAD", headers=headers)
+        try:
+            with urllib_request.urlopen(request_obj, timeout=self._timeout) as response:
+                info = response.info()
+                etag = info.get("ETag")
+                length = info.get("Content-Length")
+        except urllib_error.HTTPError as exc:
+            if exc.code in {403, 404}:
+                raise FileNotFoundError(f"Remote weight '{name}' not found at {url}") from exc
+            if exc.code in {405, 501}:
+                return _RemoteObjectMetadata(etag=None, size=None)
+            raise RuntimeError(f"Failed to query metadata for weight '{name}': {exc}") from exc
+        except urllib_error.URLError as exc:
+            raise RuntimeError(f"Failed to reach '{url}' for weight '{name}': {exc}") from exc
+        size: Optional[int]
+        try:
+            size = int(length) if length is not None else None
+        except ValueError:
+            size = None
+        return _RemoteObjectMetadata(etag=etag, size=size)
+
+    def _download_remote(
+        self,
+        name: str,
+        spec: Mapping[str, Any],
+        target_path: Path,
+        metadata: _RemoteObjectMetadata,
+    ) -> None:
+        del metadata
+        url = str(spec["url"])
+        headers = self._build_headers(spec)
+        request_obj = urllib_request.Request(url, headers=headers)
+        tmp_path = target_path.with_name(f"{target_path.name}.{uuid.uuid4().hex}.tmp")
+        tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with urllib_request.urlopen(request_obj, timeout=self._timeout) as response, tmp_path.open(
+                "wb"
+            ) as fh:
+                shutil.copyfileobj(response, fh)
+        except urllib_error.HTTPError as exc:
+            tmp_path.unlink(missing_ok=True)
+            if exc.code == 404:
+                raise FileNotFoundError(f"Remote weight not found at {url}") from exc
+            raise RuntimeError(f"HTTP download failed for '{url}': {exc}") from exc
+        except urllib_error.URLError as exc:
+            tmp_path.unlink(missing_ok=True)
+            raise RuntimeError(f"Failed to download '{url}': {exc}") from exc
+        os.replace(tmp_path, target_path)
+
+
+class S3WeightStore(_RemoteWeightStoreBase):
+    def __init__(
+        self,
+        bucket: str,
+        objects: Union[Mapping[str, Mapping[str, Any]], Sequence[Mapping[str, Any]]],
+        *,
+        cache_dir: Union[str, Path],
+        max_bytes: Optional[int] = 2 * 1024**3,
+        mmap_mode: bool = True,
+        mmap_threshold_bytes: Optional[int] = _DEFAULT_NPZ_MMAP_THRESHOLD,
+        strict: bool = False,
+        client: Optional[Any] = None,
+        session_kwargs: Optional[Mapping[str, Any]] = None,
+        client_kwargs: Optional[Mapping[str, Any]] = None,
+    ):
+        self.bucket = str(bucket)
+        self._session_kwargs = dict(session_kwargs or {})
+        self._client_kwargs = dict(client_kwargs or {})
+        if client is not None:
+            self._client = client
+        else:
+            try:
+                import boto3
+            except ImportError as exc:  # pragma: no cover - requires optional dependency
+                raise RuntimeError(
+                    "S3WeightStore requires boto3. Install 'boto3' to enable S3 support."
+                ) from exc
+            session = boto3.session.Session(**self._session_kwargs)
+            self._client = session.client("s3", **self._client_kwargs)
+        super().__init__(
+            objects,
+            cache_dir=cache_dir,
+            max_bytes=max_bytes,
+            mmap_mode=mmap_mode,
+            mmap_threshold_bytes=mmap_threshold_bytes,
+            strict=strict,
+        )
+
+    def _fingerprint_kind(self) -> str:
+        return "s3"
+
+    def _fingerprint_extra(self) -> Dict[str, Any]:
+        return {"bucket": self.bucket}
+
+    def _validate_spec(self, name: str, spec: Mapping[str, Any]) -> None:
+        key = spec.get("key")
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"S3 weight '{name}' must include a 'key'")
+        if spec.get("extra_args") is not None and not isinstance(spec["extra_args"], Mapping):
+            raise ValueError(f"S3 weight '{name}' extra_args must be a mapping")
+
+    def _local_filename(self, name: str, spec: Mapping[str, Any]) -> str:
+        del name
+        key = str(spec["key"])
+        suffix = Path(key).suffix
+        if not suffix:
+            suffix = ".npy"
+        return f"payload{suffix}"
+
+    def _fetch_remote_metadata(self, name: str, spec: Mapping[str, Any]) -> _RemoteObjectMetadata:
+        params: Dict[str, Any] = {"Bucket": self.bucket, "Key": spec["key"]}
+        version = spec.get("version_id")
+        if version:
+            params["VersionId"] = version
+        try:
+            response = self._client.head_object(**params)
+        except Exception as exc:
+            error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                raise FileNotFoundError(
+                    f"S3 object for weight '{name}' not found (bucket={self.bucket}, key={spec['key']})"
+                ) from exc
+            raise RuntimeError(
+                f"Failed to query S3 metadata for weight '{name}': {exc}"
+            ) from exc
+        etag = response.get("ETag")
+        size_raw = response.get("ContentLength")
+        try:
+            size = int(size_raw) if size_raw is not None else None
+        except (TypeError, ValueError):
+            size = None
+        return _RemoteObjectMetadata(etag=etag, size=size)
+
+    def _download_remote(
+        self,
+        name: str,
+        spec: Mapping[str, Any],
+        target_path: Path,
+        metadata: _RemoteObjectMetadata,
+    ) -> None:
+        del metadata
+        params: Dict[str, Any] = {"Bucket": self.bucket, "Key": spec["key"]}
+        version = spec.get("version_id")
+        if version:
+            params["VersionId"] = version
+        extra_args = spec.get("extra_args")
+        if isinstance(extra_args, Mapping):
+            for key, value in extra_args.items():
+                if key not in {"Bucket", "Key"}:
+                    params[key] = value
+        tmp_path = target_path.with_name(f"{target_path.name}.{uuid.uuid4().hex}.tmp")
+        tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            response = self._client.get_object(**params)
+        except Exception as exc:
+            tmp_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Failed to download S3 object for weight '{name}': {exc}"
+            ) from exc
+        body = response.get("Body")
+        if body is None:
+            tmp_path.unlink(missing_ok=True)
+            raise RuntimeError("S3 response missing streaming body")
+        try:
+            with tmp_path.open("wb") as fh:
+                while True:
+                    chunk = body.read(4 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+        finally:
+            if hasattr(body, "close"):
+                body.close()
+        os.replace(tmp_path, target_path)
 
 
 @dataclass

@@ -13,11 +13,13 @@ from . import logic, nn, pgm
 from .core.cache import CacheManager
 from .core.evaluator_numpy import ExecutionConfig
 from .core.policies import (
+    HTTPWeightStore,
     InMemoryWeightStore,
     LoRAPolicy,
     ManifestWeightStore,
     QuantizationPolicy,
     RuntimePolicies,
+    S3WeightStore,
     ShardingPolicy,
 )
 from .core.program import Program
@@ -53,8 +55,10 @@ __all__ = [
     "Program",
     "ExecutionConfig",
     "RuntimePolicies",
+    "HTTPWeightStore",
     "InMemoryWeightStore",
     "ManifestWeightStore",
+    "S3WeightStore",
     "from_pytorch",
     "from_safetensors",
     "to_torchscript",
