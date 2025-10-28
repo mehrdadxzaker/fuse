@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-import numpy as np
+from numpy.typing import NDArray
 
 from ..core.evaluator_numpy import ExecutionConfig as ExecutionConfig
 from ..core.policies import InMemoryWeightStore as InMemoryWeightStore
@@ -17,13 +17,13 @@ class Variable:
 class Factor:
     name: str
     scope: tuple[str, ...]
-    table: np.ndarray
+    table: NDArray[Any]
     def normalized(self) -> Factor: ...
 
 @dataclass
 class TreeProgram:
     program: Program
-    weights: dict[str, np.ndarray]
+    weights: dict[str, NDArray[Any]]
     query_vars: tuple[str, ...]
     variables: dict[str, Variable]
     def compile(self, *, config: ExecutionConfig | None = None) -> Program: ...
@@ -37,4 +37,4 @@ class TreeFactorGraph:
     def build_program(self, *, query_vars: Sequence[str], evidence: dict[str, Any] | None = None) -> TreeProgram: ...
 
 def conditional_probability(outputs: dict[str, Any], query_vars: Sequence[str], assignment: dict[str, int]) -> float: ...
-def brute_force_joint(factors: Sequence[Factor], variables: Sequence[Variable], evidence: dict[str, int] | None = None) -> np.ndarray: ...
+def brute_force_joint(factors: Sequence[Factor], variables: Sequence[Variable], evidence: dict[str, int] | None = None) -> NDArray[Any]: ...

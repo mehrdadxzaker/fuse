@@ -1,15 +1,15 @@
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import numpy as np
+from numpy.typing import NDArray
 import torch
 from _typeshed import Incomplete
 
 from .core.policies import RuntimePolicies as RuntimePolicies
 from .core.program import Program as Program
 
-def from_pytorch(state_dict: Mapping[str, Any], mapping: Mapping[str, Mapping[str, Any]], *, strict: bool = True) -> dict[str, np.ndarray]: ...
-def from_safetensors(path: str | Path, mapping: Mapping[str, Mapping[str, Any]], *, strict: bool = True) -> dict[str, np.ndarray]: ...
+def from_pytorch(state_dict: Mapping[str, Any], mapping: Mapping[str, Mapping[str, Any]], *, strict: bool = True) -> dict[str, NDArray[Any]]: ...
+def from_safetensors(path: str | Path, mapping: Mapping[str, Mapping[str, Any]], *, strict: bool = True) -> dict[str, NDArray[Any]]: ...
 
 class _FuseTorchModule:
     runner: Incomplete
