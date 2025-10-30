@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fuse DSL — Visual Overview</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1026;
+        --bg-light: #131a38;
+        --accent: #ff7a59;
+        --accent-light: #ffc38c;
+        --text: #f0f4ff;
+        --muted: rgba(240, 244, 255, 0.7);
+        --shadow: rgba(11, 16, 38, 0.5);
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(255, 122, 89, 0.15), transparent 50%),
+          radial-gradient(circle at 80% 0%, rgba(122, 167, 255, 0.12), transparent 55%),
+          var(--bg);
+        color: var(--text);
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 4rem;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 3.5rem;
+      }
+
+      h1 {
+        font-size: clamp(2.5rem, 4vw, 3.5rem);
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        font-size: clamp(1.1rem, 2.2vw, 1.35rem);
+        max-width: 700px;
+        margin: 0 auto 1.5rem;
+        color: var(--muted);
+      }
+
+      .cta {
+        display: inline-flex;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      .cta a {
+        text-decoration: none;
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.75rem 1.5rem;
+        border-radius: 999px;
+        box-shadow: 0 12px 30px rgba(11, 16, 38, 0.25);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+
+      .cta a.primary {
+        background: linear-gradient(135deg, var(--accent), #f94f6b);
+        border: none;
+      }
+
+      .cta a:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.4);
+        box-shadow: 0 16px 38px rgba(11, 16, 38, 0.35);
+      }
+
+      section {
+        margin-bottom: 4rem;
+        background: rgba(13, 20, 48, 0.7);
+        border-radius: 24px;
+        padding: 2.5rem 2rem;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      section h2 {
+        margin-top: 0;
+        font-size: clamp(1.75rem, 3vw, 2.1rem);
+        letter-spacing: -0.01em;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+      }
+
+      .feature-card {
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(19, 26, 56, 0.3));
+        border-radius: 18px;
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+        min-height: 180px;
+      }
+
+      .feature-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(255, 122, 89, 0.6);
+      }
+
+      .feature-card h3 {
+        margin-top: 0;
+        font-size: 1.15rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .feature-card p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .architecture {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        align-items: center;
+        margin-top: 1.5rem;
+      }
+
+      .diagram-wrapper {
+        background: rgba(8, 12, 30, 0.9);
+        border-radius: 20px;
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+      }
+
+      .diagram-wrapper svg {
+        width: 100%;
+        height: auto;
+      }
+
+      .diagram-wrapper .glow {
+        position: absolute;
+        inset: 8% 12%;
+        background: radial-gradient(circle at center, rgba(255, 122, 89, 0.18), transparent 55%);
+        filter: blur(30px);
+        pointer-events: none;
+      }
+
+      .detail-panel {
+        background: rgba(11, 18, 42, 0.95);
+        border-radius: 18px;
+        padding: 1.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+      }
+
+      .detail-panel h3 {
+        margin-top: 0;
+        font-size: 1.35rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .detail-panel p {
+        color: var(--muted);
+        margin-bottom: 0.75rem;
+      }
+
+      .detail-panel ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: var(--muted);
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+      }
+
+      .timeline-step {
+        background: rgba(15, 24, 58, 0.9);
+        border-radius: 16px;
+        padding: 1.75rem 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        position: relative;
+        transition: transform 0.2s ease;
+      }
+
+      .timeline-step::before {
+        content: attr(data-step);
+        position: absolute;
+        top: -18px;
+        left: 1.5rem;
+        background: linear-gradient(135deg, rgba(255, 122, 89, 0.95), rgba(255, 195, 140, 0.95));
+        color: #0b1026;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        box-shadow: 0 8px 20px rgba(255, 122, 89, 0.25);
+      }
+
+      .timeline-step:hover {
+        transform: translateY(-4px);
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1.25rem;
+        margin-top: 2rem;
+      }
+
+      .stat {
+        background: rgba(19, 26, 56, 0.75);
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .stat span {
+        display: block;
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+
+      .stat small {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .command-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+      }
+
+      pre {
+        background: rgba(9, 14, 35, 0.8);
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        overflow-x: auto;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #e7ecff;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .legend {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .legend span::before {
+        content: "";
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+      }
+
+      .legend .dsl::before {
+        background: #7aa7ff;
+      }
+
+      .legend .ir::before {
+        background: #ff7a59;
+      }
+
+      .legend .backend::before {
+        background: #5ed5a8;
+      }
+
+      footer {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 0.85rem;
+        margin-top: 3rem;
+      }
+
+      @media (max-width: 700px) {
+        .page {
+          padding: 2.5rem 1rem 3rem;
+        }
+
+        section {
+          padding: 2rem 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Fuse DSL — Visual Overview</h1>
+        <p>
+          Explore the end-to-end flow of Fuse: a compact tensor-equation DSL that parses programs into an intermediate
+          representation, executes them with NumPy, and lowers into Torch FX or JAX backends.
+        </p>
+        <div class="cta">
+          <a class="primary" href="https://github.com/fogtom/fuse" target="_blank" rel="noopener">View Repository</a>
+          <a href="../README.md" target="_blank" rel="noopener">Read the README</a>
+          <a href="#architecture">Jump to Architecture</a>
+        </div>
+      </header>
+
+      <section>
+        <h2>What Fuse Provides</h2>
+        <p>Key pillars of the library distilled into three themes.</p>
+        <div class="feature-grid" id="feature-grid"></div>
+      </section>
+
+      <section id="architecture">
+        <h2>Architecture Map</h2>
+        <p>
+          Hover or tap on each node to explore how Fuse parses DSL programs, generates IR, and executes through the available
+          backends.
+        </p>
+        <div class="architecture">
+          <div class="diagram-wrapper">
+            <div class="glow"></div>
+            <svg viewBox="0 0 720 420" role="img" aria-labelledby="architecture-title architecture-desc">
+              <title id="architecture-title">Fuse processing pipeline</title>
+              <desc id="architecture-desc">Visual map of Fuse components from DSL to intermediate representation to execution.</desc>
+              <defs>
+                <linearGradient id="gradient-dsl" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#7aa7ff" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#5b82ff" stop-opacity="0.85" />
+                </linearGradient>
+                <linearGradient id="gradient-ir" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#ff7a59" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#ff9c73" stop-opacity="0.85" />
+                </linearGradient>
+                <linearGradient id="gradient-backend" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#5ed5a8" stop-opacity="0.95" />
+                  <stop offset="100%" stop-color="#32b58c" stop-opacity="0.85" />
+                </linearGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="6" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <g class="link" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" stroke-linecap="round" fill="none">
+                <path d="M150 140 C 260 140, 260 210, 360 210" marker-end="url(#arrow)" />
+                <path d="M360 210 C 460 210, 460 140, 570 140" marker-end="url(#arrow)" />
+                <path d="M360 210 C 460 210, 460 210, 570 210" marker-end="url(#arrow)" />
+                <path d="M360 210 C 460 210, 460 280, 570 280" marker-end="url(#arrow)" />
+              </g>
+
+              <defs>
+                <marker id="arrow" markerWidth="12" markerHeight="12" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="rgba(255,255,255,0.55)" />
+                </marker>
+              </defs>
+
+              <rect x="60" y="120" width="160" height="120" rx="24" ry="24" fill="url(#gradient-dsl)" filter="url(#glow)"
+                data-node="dsl" />
+              <text x="140" y="180" text-anchor="middle" font-size="22" fill="#0b1026" font-weight="600">Fuse DSL</text>
+              <text x="140" y="210" text-anchor="middle" font-size="14" fill="#0b1026">Programs</text>
+
+              <rect x="270" y="150" width="180" height="120" rx="24" ry="24" fill="url(#gradient-ir)" filter="url(#glow)"
+                data-node="ir" />
+              <text x="360" y="205" text-anchor="middle" font-size="22" fill="#0b1026" font-weight="600">Core IR</text>
+              <text x="360" y="235" text-anchor="middle" font-size="14" fill="#0b1026">Parser + Evaluator</text>
+
+              <rect x="520" y="100" width="160" height="90" rx="22" ry="22" fill="url(#gradient-backend)" filter="url(#glow)"
+                data-node="numpy" />
+              <text x="600" y="145" text-anchor="middle" font-size="20" fill="#0b1026" font-weight="600">NumPy</text>
+              <text x="600" y="170" text-anchor="middle" font-size="13" fill="#0b1026">Reference Runner</text>
+
+              <rect x="520" y="180" width="160" height="90" rx="22" ry="22" fill="url(#gradient-backend)" filter="url(#glow)"
+                data-node="torch" />
+              <text x="600" y="225" text-anchor="middle" font-size="20" fill="#0b1026" font-weight="600">Torch FX</text>
+              <text x="600" y="250" text-anchor="middle" font-size="13" fill="#0b1026">Graph Export</text>
+
+              <rect x="520" y="260" width="160" height="90" rx="22" ry="22" fill="url(#gradient-backend)" filter="url(#glow)"
+                data-node="jax" />
+              <text x="600" y="305" text-anchor="middle" font-size="20" fill="#0b1026" font-weight="600">JAX</text>
+              <text x="600" y="330" text-anchor="middle" font-size="13" fill="#0b1026">XLA Callable</text>
+            </svg>
+            <div class="legend">
+              <span class="dsl">DSL</span>
+              <span class="ir">Core IR</span>
+              <span class="backend">Backends</span>
+            </div>
+          </div>
+          <aside class="detail-panel" id="detail-panel">
+            <h3>Start exploring</h3>
+            <p>Select a component on the diagram to view its responsibilities and relevant modules.</p>
+            <ul>
+              <li>Fuse DSL describes tensor programs with joins, projections, and nonlinearities.</li>
+              <li>The core IR powers parsing, caching, and the NumPy reference runner.</li>
+              <li>Backends lower the IR to NumPy, Torch FX, or JAX for execution.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <section>
+        <h2>Execution Flow</h2>
+        <p>From DSL source to output tensors—follow the recommended commands and runtime knobs.</p>
+        <div class="timeline" id="timeline"></div>
+      </section>
+
+      <section>
+        <h2>Runtime Controls & Stats</h2>
+        <p>
+          Fuse keeps execution portable across NumPy, Torch, and JAX while exposing knobs for precision, device placement, and
+          caching.
+        </p>
+        <div class="stat-grid" id="stat-grid"></div>
+      </section>
+
+      <section>
+        <h2>Jump In Quickly</h2>
+        <p>Install Fuse, run the provided examples, or generate backend artifacts straight from the command line.</p>
+        <div class="command-grid">
+          <div>
+            <h3>Install</h3>
+            <pre><code>pip install fuse-ai[dev]
+# or keep extras lean
+pip install fuse-ai[torch]</code></pre>
+          </div>
+          <div>
+            <h3>Run examples</h3>
+            <pre><code>python examples/01_attention_block.py
+python examples/02_rules_and_embeddings.py
+python examples/03_zero_input_lm.py</code></pre>
+          </div>
+          <div>
+            <h3>CLI runner</h3>
+            <pre><code>python -m fuse run program.fuse \
+  --backend numpy \
+  --inputs inputs.json</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        Built from the Fuse README and docs. Customize this page to showcase new backends, performance experiments, or DSL
+        extensions as they land.
+      </footer>
+    </div>
+
+    <script>
+      const features = [
+        {
+          title: "Compact Tensor DSL",
+          description:
+            "Describe tensor joins, projections, nonlinearities, and file-backed sources in a concise, composable syntax that mirrors Einstein summation."
+        },
+        {
+          title: "Shared Intermediate Representation",
+          description:
+            "A unified IR powers parsing, caching, and execution policies so that NumPy, Torch, and JAX remain aligned across runners."
+        },
+        {
+          title: "Multi-backend Execution",
+          description:
+            "Reference evaluator in NumPy plus lowerings into Torch FX and JAX with optional XLA callable export for high-performance deployment."
+        },
+        {
+          title: "Runtime Policies & Caching",
+          description:
+            "ExecutionConfig keeps precision, device placement, zero-copy, and caching consistent while enabling quantised weights and fixpoint strategies."
+        },
+        {
+          title: "Examples & Tooling",
+          description:
+            "Starter scripts demonstrate masked attention, rule reasoning, and zero-input LM heads while CLI tooling accelerates iteration."
+        },
+        {
+          title: "Extensible Core",
+          description:
+            "Extendable parser, modular evaluators, and backend hooks let you plug in new weight stores, sharding strategies, or custom runners."
+        }
+      ];
+
+      const architectureDetails = {
+        dsl: {
+          title: "Fuse DSL",
+          description:
+            "Programs are authored as tensor equations with joins, projections, and nonlinearities. Files act as first-class sources and sinks for tensors.",
+          bullets: [
+            "Located under examples/*.fuse and Python harnesses in examples/*.py.",
+            "Supports concat, amax/avg projections, literal tensors, and keyword arguments.",
+            "Feeds the parser for IR construction via Program()."
+          ]
+        },
+        ir: {
+          title: "Core IR & Evaluator",
+          description:
+            "The Program parser builds an IR that powers caching, fixpoint scheduling, and policy hooks shared by every backend.",
+          bullets: [
+            "Core modules live under src/fuse/core/ including parser and evaluator_numpy.py.",
+            "ExecutionConfig toggles precision, device, zero-copy transfers, and delta fixpoint scheduling.",
+            "CacheManager persists compiled artifacts for replay and rapid iteration."
+          ]
+        },
+        numpy: {
+          title: "NumPy Runner",
+          description:
+            "Reference evaluator that executes IR directly with NumPy, supporting fixpoint recursion, caching, and explain() diagnostics.",
+          bullets: [
+            "Implements semi-naïve delta joins via ExecutionConfig(fixpoint_strategy).",
+            "Always executes on CPU with fp32 precision but honours zero-copy buffers.",
+            "Recommended for experimentation, correctness validation, and CLI runs."
+          ]
+        },
+        torch: {
+          title: "Torch FX Backend",
+          description:
+            "Lowers Fuse programs into torch.fx GraphModules backed by torch.einsum and neural network primitives for deployment on CPU, CUDA, or MPS.",
+          bullets: [
+            "Respects ExecutionConfig precision and device settings, validating fp16 availability.",
+            "Reuse runtime inputs via runner.run(inputs={\"Source\": tensor}).",
+            "Cacheable graph export integrates with weight stores and quantised parameters."
+          ]
+        },
+        jax: {
+          title: "JAX Backend",
+          description:
+            "Executes with jax.numpy and exposes runner.xla_callable for jax.jit compilation, supporting optional XLA artifact caching.",
+          bullets: [
+            "Precision auto-detects best dtype per device; supports bf16/fp16 on GPU and TPU.",
+            "validate_device_transfers enforces explicit device_put hand-offs when needed.",
+            "Enable ExecutionConfig(jax_enable_xla_cache=True) to reuse compiled callables."
+          ]
+        }
+      };
+
+      const timelineSteps = [
+        {
+          step: "1",
+          title: "Author DSL Program",
+          description:
+            "Write tensor equations in a .fuse file or embed them in Python. Pair programs with NumPy assets under examples/data."
+        },
+        {
+          step: "2",
+          title: "Compile to IR",
+          description:
+            "Use Program.compile() to parse and normalise the DSL, enabling explain() diagnostics and caching hooks."
+        },
+        {
+          step: "3",
+          title: "Select Backend",
+          description:
+            "Choose numpy, torch, or jax runners. Torch FX and JAX can export artifacts while NumPy remains the reference evaluator."
+        },
+        {
+          step: "4",
+          title: "Run with Inputs",
+          description:
+            "Feed runtime tensors via runner.run(inputs={...}) or rely on file-backed defaults. Inspect outputs or export via CLI."
+        }
+      ];
+
+      const stats = [
+        { value: "3", label: "Backends" },
+        { value: "4", label: "Execution knobs (precision, device, zero_copy, cache)" },
+        { value: "3", label: "Ready-to-run examples" },
+        { value: "1", label: "Unified DSL → IR pipeline" }
+      ];
+
+      const featureGrid = document.getElementById("feature-grid");
+      featureGrid.innerHTML = features
+        .map(
+          (feature) => `
+            <article class="feature-card">
+              <h3>${feature.title}</h3>
+              <p>${feature.description}</p>
+            </article>
+          `
+        )
+        .join("");
+
+      const timelineEl = document.getElementById("timeline");
+      timelineEl.innerHTML = timelineSteps
+        .map(
+          (item) => `
+            <article class="timeline-step" data-step="${item.step}">
+              <h3>${item.title}</h3>
+              <p>${item.description}</p>
+            </article>
+          `
+        )
+        .join("");
+
+      const statGrid = document.getElementById("stat-grid");
+      statGrid.innerHTML = stats
+        .map(
+          (stat) => `
+            <div class="stat">
+              <span>${stat.value}</span>
+              <small>${stat.label}</small>
+            </div>
+          `
+        )
+        .join("");
+
+      const detailPanel = document.getElementById("detail-panel");
+      const nodes = document.querySelectorAll("[data-node]");
+
+      nodes.forEach((node) => {
+        node.addEventListener("mouseenter", () => updateDetail(node.dataset.node));
+        node.addEventListener("focus", () => updateDetail(node.dataset.node));
+        node.addEventListener("click", () => updateDetail(node.dataset.node));
+      });
+
+      function updateDetail(key) {
+        const detail = architectureDetails[key];
+        if (!detail) return;
+        detailPanel.innerHTML = `
+          <h3>${detail.title}</h3>
+          <p>${detail.description}</p>
+          <ul>${detail.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}</ul>
+        `;
+      }
+    </script>
+  </body>
+</html>
