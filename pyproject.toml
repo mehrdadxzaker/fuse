@@ -77,7 +77,7 @@ python_version = "3.9"
 warn_unused_configs = true
 ignore_missing_imports = true
 implicit_optional = true
-follow_imports = "normal"
+follow_imports = "skip"
 mypy_path = ["stubs"]
 files = [
     "src/fuse/core/stats.py",

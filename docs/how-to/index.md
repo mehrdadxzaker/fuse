@@ -1,49 +1,92 @@
-# How‑to Guides
+# How-to Guides
 
-- Compile across backends (NumPy/Torch/JAX)
-- Export to TorchScript / ONNX
-- Use caching and artifacts
-- Configure runtime policies (weights, sharding, quant, LoRA)
+[[toc]]
+
+These recipes cover day-to-day tasks: compiling programs, exporting artifacts, caching, and configuring runtime policies.
 
 ## Compile across backends
 
-```python
-from fuse import Program
-from fuse import torch as fuse_torch
+=== "Python API"
 
-prog = Program(open("examples/04_mlp.fuse").read())
+    ```python
+    from pathlib import Path
 
-# NumPy
-runner = prog.compile(backend="numpy")
-runner()
+    from fuse import Program
 
-# Torch FX
-t_runner = fuse_torch.compile(prog, device="auto")
-t_runner()
-```
+    source = Path("examples/04_mlp.fuse").read_text()
+    program = Program(source)
+
+    numpy_runner = program.compile(backend="numpy")
+    numpy_runner()
+    ```
+
+=== "Torch FX"
+
+    ```python
+    from pathlib import Path
+
+    from fuse import Program
+    from fuse import torch as fuse_torch
+
+    program = Program(Path("examples/04_mlp.fuse").read_text())
+    torch_runner = fuse_torch.compile(program, device="auto")
+    torch_runner()
+    ```
+
+=== "CLI"
+
+    ```bash
+    python -m fuse run examples/04_mlp.fuse --backend numpy --cache .cache
+    ```
+
+!!! tip
+    Switching between backends is a compile-time choice. The DSL stays identical across engines, so you can validate behaviour under NumPy before deploying with Torch or JAX.
 
 ## Export to TorchScript / ONNX
 
 ```python
-from fuse import to_torchscript, to_onnx
+from pathlib import Path
 
-ts = to_torchscript(prog)  # torch.jit.ScriptModule
-onnx = to_onnx(prog)       # writes a basic ONNX graph
+from fuse import Program, to_torchscript, to_onnx
+
+program = Program(Path("examples/04_mlp.fuse").read_text())
+script_module = to_torchscript(program)
+onxx_model = to_onnx(program)
 ```
 
-## Caching
+!!! note
+    TorchScript export returns a `torch.jit.ScriptModule`. The ONNX helper writes to disk and returns the file path.
+
+## Enable caching
 
 ```python
-runner = prog.compile(backend="numpy", cache_dir=".cache")
+from pathlib import Path
+
+from fuse import Program
+
+program = Program(Path("examples/05_transformer_block.fuse").read_text())
+runner = program.compile(backend="numpy", cache_dir=".cache")
 runner()
 ```
 
-## Runtime policies (weights, quant, LoRA)
+Cache directories persist compiled IR and backend artifacts. Reuse the same path across runs to skip recompilation.
+
+## Configure runtime policies
+
+Policies drive weight loading, quantisation, sharding, and LoRA adapters. Mix and match to match your deployment constraints.
 
 ```python
-from fuse import RuntimePolicies, ManifestWeightStore
+from pathlib import Path
 
-pol = RuntimePolicies(weight_store=ManifestWeightStore("examples/ckpt/manifest.json"))
-runner = prog.compile(backend="numpy", policies=pol)
+from fuse import Program, RuntimePolicies, ManifestWeightStore
+
+program = Program(Path("examples/05_transformer_block.fuse").read_text())
+policies = RuntimePolicies(
+    weight_store=ManifestWeightStore("examples/ckpt/manifest.json"),
+    strict_weights=True,
+)
+runner = program.compile(backend="numpy", policies=policies)
 ```
 
+!!! info "Policy debugging"
+    Call `policies.describe()` to inspect active rules. During execution, `Program.explain()` captures policy-driven caching events alongside tensor traces.
