@@ -38,11 +38,16 @@ try:
     import torch.nn.functional as F
     from torch.fx import GraphModule, symbolic_trace
     from torch.fx.passes.shape_prop import ShapeProp
+    try:
+        from torch.fx.proxy import Proxy as FxProxy  # type: ignore
+    except Exception:  # pragma: no cover - optional import path differences
+        FxProxy = None  # type: ignore
 except Exception:  # pragma: no cover - torch optional
     torch = None
     F = None
     GraphModule = None
     ShapeProp = None
+    FxProxy = None  # type: ignore
 
 
 def compile(
@@ -679,6 +684,7 @@ class TorchRunner:
         self._groups: List[Tuple[str, List[Equation]]] = []
         self._prepare()
         self.input_names: List[str] = [src.lhs.name for src in self._sources]
+        self.fx_input_names: List[str] = self._compute_fx_input_names()
 
         # Hint for faster fp32 matmul kernels on CUDA
         try:
@@ -690,6 +696,7 @@ class TorchRunner:
             pass
 
         # Build/load FX graph and optionally wrap with torch.compile
+        self._fx_sig_key: Optional[Tuple[Any, ...]] = None
         self.fx_module: Optional[GraphModule] = self._load_or_build_fx()
         self._fx_callable = None
         if self.fx_module is not None:
@@ -740,12 +747,42 @@ class TorchRunner:
         self.logs.clear()
         self._run_sources()
 
+        # If runtime inputs are provided, rebuild FX for this signature when needed
+        fx_sig: Optional[Tuple[Any, ...]] = None
+        input_feed_for_trace: Optional[Dict[str, Any]] = None
+        if inputs:
+            sig_items: List[Tuple[str, Tuple[int, ...], str]] = []
+            input_feed_for_trace = {}
+            for name, val in inputs.items():
+                if isinstance(val, torch.Tensor):
+                    shape = tuple(int(s) for s in val.shape)
+                    dtype_str = str(val.dtype)
+                    tensor_val = val.to(device=self.device)
+                    if tensor_val.dtype != self.default_dtype:
+                        tensor_val = tensor_val.to(dtype=self.default_dtype)
+                else:
+                    arr = np.asarray(val)
+                    shape = tuple(int(s) for s in arr.shape)
+                    dtype_str = str(arr.dtype)
+                    tensor_val = _tensor_from_numpy_safe(
+                        arr, device=self.device, target_dtype=self.default_dtype, zero_copy=self.zero_copy
+                    )
+                sig_items.append((name, shape, dtype_str))
+                input_feed_for_trace[name] = tensor_val
+            fx_sig = tuple(sorted(sig_items, key=lambda x: x[0]))
+
+            if getattr(self, "_fx_sig_key", None) != fx_sig:
+                module = self._load_or_build_fx(input_signature=fx_sig, input_feed=input_feed_for_trace)
+                self.fx_module = module
+                self._fx_sig_key = fx_sig
+                if module is not None:
+                    try:
+                        self._fx_callable = _maybe_torch_compile(module)
+                    except Exception:
+                        self._fx_callable = module
+
         # Prefer executing the whole program via FX/Inductor when feasible
-        can_use_fx = (
-            getattr(self, "_fx_callable", None) is not None
-            and (inputs is None or len(inputs) == 0)
-            and cfg.mode == "single"
-        )
+        can_use_fx = getattr(self, "_fx_callable", None) is not None and cfg.mode == "single"
 
         if can_use_fx:
             try:
@@ -850,9 +887,13 @@ class TorchRunner:
         return name in self.boolean_tensors
 
     def _ensure_boolean_tensor(self, name: str, tensor: torch.Tensor) -> torch.Tensor:
-        tensor = tensor.to(self.device)
-        if tensor.dtype != self.default_dtype:
-            tensor = tensor.to(dtype=self.default_dtype)
+        # Avoid dtype branching on FX proxies; emit a single to() call instead
+        if 'FxProxy' in globals() and FxProxy is not None and isinstance(tensor, FxProxy):  # type: ignore[name-defined]
+            tensor = tensor.to(device=self.device, dtype=self.default_dtype)
+        else:
+            tensor = tensor.to(self.device)
+            if tensor.dtype != self.default_dtype:
+                tensor = tensor.to(dtype=self.default_dtype)
         if not self._is_boolean_tensor(name):
             return tensor
         return (tensor > 0).to(dtype=self.default_dtype, device=self.device)
@@ -1635,6 +1676,12 @@ class TorchRunner:
             if tensor.dtype != self.default_dtype:
                 tensor = tensor.to(dtype=self.default_dtype)
             return tensor
+        # Allow FX tracing proxies to flow through without numpy conversion
+        if 'FxProxy' in globals() and FxProxy is not None and isinstance(value, FxProxy):  # type: ignore[name-defined]
+            try:
+                return value.to(device=self.device, dtype=self.default_dtype)  # type: ignore[return-value]
+            except Exception:
+                return value  # type: ignore[return-value]
         array = value if isinstance(value, np.ndarray) else np.asarray(value)
         return _tensor_from_numpy_safe(
             array,
@@ -1642,6 +1689,38 @@ class TorchRunner:
             target_dtype=self.default_dtype,
             zero_copy=self.zero_copy,
         )
+
+    def _compute_fx_input_names(self) -> List[str]:
+        # Gather all defined names (LHS) and all referenced names in RHS
+        defined: Set[str] = set(eq.lhs.name for eq in self.ir.equations)
+        sources: Set[str] = set(eq.lhs.name for eq in self.ir.equations if eq.is_source)
+        used: Set[str] = set()
+
+        def _collect_names(obj: Any) -> None:
+            if isinstance(obj, TensorRef):
+                used.add(obj.name)
+                return
+            if isinstance(obj, Term):
+                for f in obj.factors:
+                    _collect_names(f)
+                return
+            if isinstance(obj, FuncCall):
+                arg = obj.arg
+                if isinstance(arg, tuple):
+                    for item in arg:
+                        _collect_names(item)
+                elif arg is not None:
+                    _collect_names(arg)
+                for val in obj.kwargs.values():
+                    _collect_names(val)
+                return
+            # Ignore IndexFunction and literals
+
+        for eq in self.ir.equations:
+            _collect_names(eq.rhs)
+
+        # Dynamic inputs: sources + names used in RHS that are not defined by any LHS
+        return sorted(list(sources | (used - defined)))
 
     def _materialize_weight(self, name: str, payload: Any) -> torch.Tensor:
         import torch
@@ -1688,9 +1767,9 @@ class TorchRunner:
         raise ValueError(f"Cannot resolve axis specification: {spec}")
 
     # FX Graph ----------------------------------------------------------------
-    def _load_or_build_fx(self) -> Optional[GraphModule]:
+    def _load_or_build_fx(self, *, input_signature: Optional[Tuple[Any, ...]] = None, input_feed: Optional[Dict[str, Any]] = None) -> Optional[GraphModule]:
         if self.cache_manager is None or GraphModule is None:
-            return self._build_fx()
+            return self._build_fx(input_feed=input_feed)
 
         fingerprint = cache_fingerprint(
             program_src=self.program.src,
@@ -1699,7 +1778,7 @@ class TorchRunner:
             device=str(self.device),
             execution_config=self.config,
             policies=self.policies,
-            extra={"exports": list(self.ir.exports)},
+            extra={"exports": list(self.ir.exports), "input_signature": input_signature},
         )
         cache_key = cache_key_from_fingerprint(fingerprint)
         record = self.cache_manager.load("torch", cache_key)
@@ -1711,7 +1790,7 @@ class TorchRunner:
             except Exception:
                 pass
 
-        module = self._build_fx()
+        module = self._build_fx(input_feed=input_feed)
         if module is not None:
             buffer = io.BytesIO()
             torch.save(module, buffer)
@@ -1727,11 +1806,11 @@ class TorchRunner:
             )
         return module
 
-    def _build_fx(self) -> Optional[GraphModule]:
+    def _build_fx(self, *, input_feed: Optional[Dict[str, Any]] = None) -> Optional[GraphModule]:
         if torch is None or symbolic_trace is None:
             return None
 
-        trace_runner = _TorchTraceHarness(self)
+        trace_runner = _TorchTraceHarness(self, input_feed=input_feed)
         try:
             with torch.no_grad():
                 gm = symbolic_trace(trace_runner)
@@ -1745,14 +1824,15 @@ class TorchRunner:
 if torch is not None:
 
     class _TorchTraceHarness(torch.nn.Module):
-        def __init__(self, runner: TorchRunner):
+        def __init__(self, runner: TorchRunner, input_feed: Optional[Dict[str, Any]]):
             super().__init__()
             self.runner = runner
+            self.input_feed: Dict[str, Any] = dict(input_feed) if input_feed else {}
 
         @torch.no_grad()
         def forward(self) -> Tuple[torch.Tensor, ...]:
             cfg = replace(self.runner.config, mode="single")
-            outputs = self.runner.run(config=cfg, skip_sinks=True)
+            outputs = self.runner.run(inputs=self.input_feed, config=cfg, skip_sinks=True)
             return tuple(outputs[name] for name in self.runner.ir.exports)
 
 else:
