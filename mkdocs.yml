@@ -1,8 +1,8 @@
 site_name: Fuse
 site_description: Tensor‑equation DSL as a library (NumPy + Torch/JAX)
-site_url: https://example.com/fuse
-repo_url: https://github.com/example/fuse
-repo_name: fuse-ai/fuse
+site_url: https://www.neuralint.io/fuse
+repo_url: https://github.com/mehrdadxzaker/fuse
+repo_name: fuse
 
 theme:
   name: material
@@ -40,6 +40,9 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          paths:
+            - src
+          load_external_modules: true
           options:
             show_root_heading: true
             show_object_full_path: false
@@ -48,14 +51,12 @@ plugins:
             filters:
               - '!^_'  # hide private members
             members_order: source
-          setup_commands:
-            - import sys
-            - sys.path.insert(0, 'src')
-  - gen-files
+  - gen-files:
+      scripts:
+        - docs/_scripts/gen_ref_pages.py
   - literate-nav
   - section-index
   - mike
-  - link-check
 
 markdown_extensions:
   - admonition
@@ -79,5 +80,3 @@ watch:
   - src
   - docs
 
-hooks:
-  - docs/_scripts/gen_ref_pages.py

@@ -16,11 +16,20 @@ for path in sorted(SRC_DIR.rglob("*.py")):
     # Only document our package
     if parts[0] != PACKAGE:
         continue
-    mod_name = ".".join(parts)
+    if parts[-1] == "__init__":
+        mod_name = ".".join(parts[:-1])
+        doc_parts = parts[:-1]
+        if mod_name == "":
+            # Skip top-level package module entry; reference/index.md covers it
+            continue
+    else:
+        mod_name = ".".join(parts)
+        doc_parts = parts
+
     modules.append((parts, mod_name))
 
-    doc_path = Path("reference", *parts, "index.md")
-    nav_path = parts[1:]  # drop top-level package from nav root
+    doc_path = Path("reference", *doc_parts, "index.md")
+    nav_path = doc_parts[1:] or [doc_parts[0]]
 
     nav[tuple(nav_path)] = doc_path.as_posix()
 
@@ -36,7 +45,17 @@ for path in sorted(SRC_DIR.rglob("*.py")):
 
 # Write summary nav and landing page
 with mkdocs_gen_files.open("reference/SUMMARY.md", "w") as fd:
-    fd.write(nav.build_literate_nav())
+    for line in nav.build_literate_nav():
+        if "](" in line:
+            prefix, remainder = line.split("](", 1)
+            target, suffix = remainder.split(")", 1)
+            try:
+                target_path = Path(target)
+                relative = target_path.relative_to("reference").as_posix()
+            except ValueError:
+                relative = target
+            line = f"{prefix}]({relative}){suffix}"
+        fd.write(line)
 
 with mkdocs_gen_files.open("reference/index.md", "w") as fd:
     fd.write("# API Reference\n\n")
