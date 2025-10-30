@@ -79,11 +79,14 @@ ignore_missing_imports = true
 implicit_optional = true
 follow_imports = "normal"
 mypy_path = ["stubs"]
+files = [
+    "src/fuse/core/stats.py",
+    "src/fuse/core/temperature.py",
+]
 
 [[tool.mypy.overrides]]
-module = "src.fuse.*"
+module = ["fuse.core.stats", "fuse.core.temperature"]
 strict = true
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"

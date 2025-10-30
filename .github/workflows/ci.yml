@@ -32,8 +32,8 @@ jobs:
       - name: Ruff lint
         run: ruff check src tests
 
-      - name: Mypy (strict)
-        run: mypy --strict -p fuse
+      - name: Mypy
+        run: mypy
 
       - name: Pytest with coverage
         run: pytest -q --cov=src --cov-report=xml

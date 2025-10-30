@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple, Union
 
 
 def _prod(values: Iterable[int]) -> int:
@@ -61,7 +61,7 @@ def compute_einsum_stats(
     operand_itemsizes: Sequence[int],
     result_shape: Sequence[int],
     result_itemsize: int,
-) -> Dict[str, float]:
+) -> Dict[str, Union[float, int, List[str]]]:
     if not equation:
         return {}
 
@@ -94,7 +94,7 @@ def compute_einsum_stats(
         "bytes_in": int(bytes_in),
         "bytes_out": int(bytes_out),
         "bytes_total": int(bytes_in + bytes_out),
-        "contracted": contracted_labels,
-        "output_indices": output_labels,
+        "contracted": list(contracted_labels),
+        "output_indices": list(output_labels),
         "reductions": reductions,
     }

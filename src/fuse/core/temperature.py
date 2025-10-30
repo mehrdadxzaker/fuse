@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 Number = Union[int, float]
 TemperatureSpec = Union[
@@ -30,7 +30,7 @@ class TemperatureSchedule:
 class ConstantSchedule(TemperatureSchedule):
     temperature: float
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.temperature = float(self.temperature)
 
     def value(self, iteration: int) -> float:
@@ -46,7 +46,7 @@ class LinearRampSchedule(TemperatureSchedule):
     end: float
     steps: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.steps <= 0:
             raise ValueError("LinearRampSchedule.steps must be positive")
         self.start = float(self.start)
@@ -71,12 +71,13 @@ class LinearRampSchedule(TemperatureSchedule):
 
 @dataclass
 class PiecewiseSchedule(TemperatureSchedule):
-    points: Sequence[Tuple[int, float]]
+    points: Sequence[Tuple[int, Number]]
+    _points: List[Tuple[int, float]] = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.points:
             raise ValueError("PiecewiseSchedule requires at least one point")
-        normalized = []
+        normalized: List[Tuple[int, float]] = []
         for step, value in self.points:
             step_int = int(step)
             normalized.append((step_int, float(value)))
@@ -109,10 +110,10 @@ class CallableSchedule(TemperatureSchedule):
         return {"type": "callable", "description": str(desc)}
 
 
-def _coerce_callable(spec: Callable[[int], Number]) -> TemperatureSchedule:
+def _coerce_callable(
+    spec: TemperatureSchedule | Callable[[int], Number],
+) -> TemperatureSchedule:
     if isinstance(spec, TemperatureSchedule):
-        return spec
-    if isinstance(spec, CallableSchedule):
         return spec
     desc = getattr(spec, "__name__", None)
     return CallableSchedule(spec, description=desc)
@@ -137,7 +138,16 @@ def _schedule_from_mapping(mapping: Mapping[str, Any]) -> TemperatureSchedule:
         points = mapping.get("points")
         if not isinstance(points, Iterable):
             raise ValueError("piecewise schedule requires iterable 'points'")
-        return PiecewiseSchedule(tuple(points))
+        processed: List[Tuple[int, Number]] = []
+        for item in points:
+            if not isinstance(item, Iterable):
+                raise ValueError("piecewise schedule points must be iterable pairs")
+            pair = tuple(item)
+            if len(pair) != 2:
+                raise ValueError("piecewise schedule points must unpack into two values")
+            step, value = pair
+            processed.append((int(step), value))
+        return PiecewiseSchedule(tuple(processed))
     raise ValueError(f"Unsupported temperature schedule type '{schedule_type}'")
 
 
@@ -147,7 +157,16 @@ def make_schedule(spec: TemperatureSpec) -> TemperatureSchedule:
     if isinstance(spec, Mapping):
         return _schedule_from_mapping(spec)
     if isinstance(spec, Sequence) and spec and isinstance(spec[0], (tuple, list)):
-        return PiecewiseSchedule(tuple(spec))  # type: ignore[arg-type]
+        processed: List[Tuple[int, Number]] = []
+        for item in spec:
+            if not isinstance(item, Iterable):
+                raise TypeError("Piecewise schedule entries must be iterable")
+            pair = tuple(item)
+            if len(pair) != 2:
+                raise TypeError("Piecewise schedule entries must be pairs")
+            step, value = pair
+            processed.append((int(step), value))
+        return PiecewiseSchedule(tuple(processed))
     if callable(spec):
         return _coerce_callable(spec)
     if isinstance(spec, (int, float)):
@@ -176,10 +195,11 @@ def coerce_temperature_value(value: Any) -> float:
             return float(value.item())
         except Exception as exc:  # pragma: no cover - best effort
             raise TypeError("Temperature value must be convertible to float") from exc
+    np: Any
     try:
         import numpy as np  # Lazy import to avoid hard dependency for callers
-    except Exception:
-        np = None  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency missing
+        np = None
     if np is not None:
         try:
             arr = np.asarray(value)
