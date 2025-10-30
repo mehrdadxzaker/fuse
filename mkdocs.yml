@@ -1,7 +1,7 @@
 site_name: Fuse
 site_description: Tensor‑equation DSL as a library (NumPy + Torch/JAX)
 site_url: https://www.neuralint.io/fuse/docs/
-repo_url: https://github.com/mehrdadxzaker/fuse/site/
+repo_url: https://github.com/mehrdadxzaker/fuse/
 repo_name: fuse
 use_directory_urls: true
 
