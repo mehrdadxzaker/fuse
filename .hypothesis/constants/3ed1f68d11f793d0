@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/pgm/__init__.py
-# hypothesis_version: 6.142.4
-
-['EmissionMatrix[s,o]', 'FACTOR_GRAPH_SOURCES', 'HMM_FORWARD_SOURCES', 'PairXYPotential[x,y]', 'PairYZPotential[y,z]', 'PriorProb[s]', 'UnaryXPotential[x]', 'UnaryYPotential[y]', 'UnaryZPotential[z]', 'factor_graph_triplet', 'hmm_forward_two_step']

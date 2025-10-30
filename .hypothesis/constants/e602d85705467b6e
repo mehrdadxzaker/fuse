@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/nn/__init__.py
-# hypothesis_version: 6.142.4
-
-['ATTENTION_SOURCES', 'Adjacency', 'AggWeight', 'AttentionScale', 'GraphClassifier[c,d]', 'GraphPooling[n]', 'InputStream[b,p,d]', 'KeyWeight[h,dk,d]', 'MessageWeight', 'MlpWeight1[ff,d]', 'MlpWeight2[d,ff]', 'NodeClassifier[c,d]', 'NodeFeatures', 'OutputProj[d,h,dv]', 'QueryWeight[h,dk,d]', 'ReadoutWeight[t,d]', 'SelfWeight', 'TRANSFORMER_SOURCES', 'ValueWeight[h,dv,d]', 'attention_block', 'export EdgeProb', 'export Embeddings', 'export GraphProb', 'export NodeProbs', 'transformer_encoder']

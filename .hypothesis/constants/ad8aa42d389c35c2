@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/__init__.py
-# hypothesis_version: 6.142.4
-
-['0.0.0', 'CacheManager', 'ConstantSchedule', 'ExecutionConfig', 'Factor', 'GradientProgram', 'HTTPWeightStore', 'InMemoryWeightStore', 'LinearRampSchedule', 'LoRAPolicy', 'ManifestWeightStore', 'PiecewiseSchedule', 'Program', 'QuantizationPolicy', 'RuntimePolicies', 'S3WeightStore', 'ShardingPolicy', 'TreeFactorGraph', 'TreeProgram', 'Variable', '__version__', 'build_package', 'from_pytorch', 'from_safetensors', 'fuse', 'jax', 'logic', 'make_schedule', 'nn', 'pgm', 'to_onnx', 'to_torchscript', 'torch']
