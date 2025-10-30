@@ -47,7 +47,7 @@ from .package import build_package
 from .training import gradients_for_program
 
 try:
-    __version__ = _load_version("fuse-ai")
+    __version__ = _load_version("fuse")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 

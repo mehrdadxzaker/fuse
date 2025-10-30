@@ -216,7 +216,7 @@ def _module_version(name: str) -> Optional[str]:
 
 def _fuse_version() -> str:
     try:
-        return importlib.metadata.version("fuse-ai")  # type: ignore[attr-defined]
+        return importlib.metadata.version("fuse")  # type: ignore[attr-defined]
     except Exception:
         pass
     try:

@@ -14,14 +14,14 @@ Fuse targets Python 3.9+ and ships optional extras for Torch and JAX backends. T
     ```bash
     python -m venv .venv
     source .venv/bin/activate
-    pip install fuse-ai
+    pip install fuse
     ```
 
     Install optional backends as needed:
 
     ```bash
-    pip install "fuse-ai[torch]"
-    pip install "fuse-ai[jax]"
+    pip install "fuse[torch]"
+    pip install "fuse[jax]"
     ```
 
 === "Editable checkout"
