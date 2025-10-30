@@ -44,7 +44,7 @@ dev = [
     "mkdocs-literate-nav>=0.6",
     "mkdocs-section-index>=0.3",
     "mike>=2.0",
-    "mkdocs-link-check>=1.0",
+    "mkdocs-linkcheck>=1.0",
 ]
 
 [tool.setuptools.packages.find]
