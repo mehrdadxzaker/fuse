@@ -3,17 +3,10 @@
 from __future__ import annotations
 
 from setuptools import setup
-from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 
-class BinaryDistribution(_bdist_wheel):
-    """Mark the generated wheel as platform specific for cibuildwheel."""
-
-    def finalize_options(self) -> None:  # noqa: D401 - inherited summary
-        """Flag the wheel as non-pure so it receives platform tags."""
-
-        super().finalize_options()
-        self.root_is_pure = False
-
-
-setup(cmdclass={"bdist_wheel": BinaryDistribution})
+# The project ships pure Python modules only, so we intentionally avoid
+# overriding ``bdist_wheel``.  Leaving the default command class in place
+# allows cibuildwheel to detect the wheel as ``py3-none-any`` and skip the
+# ``auditwheel repair`` step, which otherwise fails for pure Python wheels.
+setup()
