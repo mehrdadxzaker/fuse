@@ -5,6 +5,7 @@ import io
 import math
 from dataclasses import replace
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from contextlib import nullcontext as _nullcontext
 
 import numpy as np
 
@@ -416,25 +417,84 @@ def _torch_attention(
         head_dim = q.shape[-1]
         scaled_query = q * (scale_value * math.sqrt(head_dim))
         scale_value = None
+    use_cuda_sdpa_ctx = (
+        hasattr(torch, "backends")
+        and hasattr(torch.backends, "cuda")
+        and hasattr(torch.backends.cuda, "sdp_kernel")
+        and q.is_cuda
+        and q.dtype in {torch.float16, torch.bfloat16, torch.float32}
+    )
     try:
-        result = F.scaled_dot_product_attention(
-            scaled_query,
-            k,
-            v,
-            attn_mask=attn_mask,
-            dropout_p=0.0,
-            is_causal=causal,
-            scale=scale_value if _HAS_SDP_SCALE else None,
+        if use_cuda_sdpa_ctx:
+            with torch.backends.cuda.sdp_kernel(
+                enable_flash=True, enable_mem_efficient=True, enable_math=False
+            ):
+                try:
+                    result = F.scaled_dot_product_attention(
+                        scaled_query,
+                        k,
+                        v,
+                        attn_mask=attn_mask,
+                        dropout_p=0.0,
+                        is_causal=causal,
+                        scale=scale_value if _HAS_SDP_SCALE else None,
+                    )
+                except TypeError:
+                    result = F.scaled_dot_product_attention(
+                        scaled_query,
+                        k,
+                        v,
+                        attn_mask=attn_mask,
+                        dropout_p=0.0,
+                        is_causal=causal,
+                    )
+        else:
+            try:
+                result = F.scaled_dot_product_attention(
+                    scaled_query,
+                    k,
+                    v,
+                    attn_mask=attn_mask,
+                    dropout_p=0.0,
+                    is_causal=causal,
+                    scale=scale_value if _HAS_SDP_SCALE else None,
+                )
+            except TypeError:
+                result = F.scaled_dot_product_attention(
+                    scaled_query,
+                    k,
+                    v,
+                    attn_mask=attn_mask,
+                    dropout_p=0.0,
+                    is_causal=causal,
+                )
+    except Exception:
+        # Retry with math fallback if optimized kernels are unavailable
+        math_ctx = (
+            torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True)  # type: ignore[attr-defined]
+            if hasattr(torch, "backends") and hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "sdp_kernel") and q.is_cuda
+            else _nullcontext()
         )
-    except TypeError:
-        result = F.scaled_dot_product_attention(
-            scaled_query,
-            k,
-            v,
-            attn_mask=attn_mask,
-            dropout_p=0.0,
-            is_causal=causal,
-        )
+        with math_ctx:
+            try:
+                result = F.scaled_dot_product_attention(
+                    scaled_query,
+                    k,
+                    v,
+                    attn_mask=attn_mask,
+                    dropout_p=0.0,
+                    is_causal=causal,
+                    scale=scale_value if _HAS_SDP_SCALE else None,
+                )
+            except TypeError:
+                result = F.scaled_dot_product_attention(
+                    scaled_query,
+                    k,
+                    v,
+                    attn_mask=attn_mask,
+                    dropout_p=0.0,
+                    is_causal=causal,
+                )
     return _restore_attention_tensor(result, q_dim)
 
 
@@ -620,7 +680,24 @@ class TorchRunner:
         self._prepare()
         self.input_names: List[str] = [src.lhs.name for src in self._sources]
 
+        # Hint for faster fp32 matmul kernels on CUDA
+        try:
+            if torch is not None and self.device.type == "cuda":
+                set_prec = getattr(torch, "set_float32_matmul_precision", None)
+                if callable(set_prec):
+                    set_prec("high")
+        except Exception:
+            pass
+
+        # Build/load FX graph and optionally wrap with torch.compile
         self.fx_module: Optional[GraphModule] = self._load_or_build_fx()
+        self._fx_callable = None
+        if self.fx_module is not None:
+            try:
+                compiled = _maybe_torch_compile(self.fx_module)
+                self._fx_callable = compiled
+            except Exception:
+                self._fx_callable = self.fx_module
 
     # Public API -------------------------------------------------------------
     def __call__(
@@ -663,10 +740,37 @@ class TorchRunner:
         self.logs.clear()
         self._run_sources()
 
-        if cfg.mode == "fixpoint":
-            self._run_fixpoint(cfg)
-        else:
-            self._run_single_pass(cfg)
+        # Prefer executing the whole program via FX/Inductor when feasible
+        can_use_fx = (
+            getattr(self, "_fx_callable", None) is not None
+            and (inputs is None or len(inputs) == 0)
+            and cfg.mode == "single"
+        )
+
+        if can_use_fx:
+            try:
+                with torch.no_grad():
+                    fx_out = self._fx_callable()  # type: ignore[operator]
+                if isinstance(fx_out, tuple):
+                    for name, value in zip(self.ir.exports, fx_out):
+                        if isinstance(value, torch.Tensor):
+                            value = value.to(device=self.device)
+                            if value.dtype != self.default_dtype:
+                                value = value.to(dtype=self.default_dtype)
+                        self.tensors[name] = value
+                elif isinstance(fx_out, torch.Tensor) and len(self.ir.exports) == 1:
+                    name = next(iter(self.ir.exports))
+                    self.tensors[name] = fx_out
+                else:
+                    can_use_fx = False
+            except Exception:
+                can_use_fx = False
+
+        if not can_use_fx:
+            if cfg.mode == "fixpoint":
+                self._run_fixpoint(cfg)
+            else:
+                self._run_single_pass(cfg)
 
         if not skip_sinks:
             self._run_sinks()

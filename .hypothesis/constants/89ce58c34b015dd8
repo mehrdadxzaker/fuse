@@ -1,0 +1,4 @@
+# file: /Users/mehrdad/Downloads/fuse/src/fuse/core/parser.py
+# hypothesis_version: 6.142.4
+
+['*', '+=', ', ', '.', ':', '=', 'COMMA', 'NEWLINE', 'SLICE', '__sink__', 'avg=', 'axis', 'dict', 'earley', 'even', 'func', 'func_call', 'fuse_grammar.lark', 'index_fn', 'list', 'max', 'max=', 'mean', 'odd', 'program', 'resolve', 'sink expression', 'sum', 'tensor', 'term', 'tuple']
