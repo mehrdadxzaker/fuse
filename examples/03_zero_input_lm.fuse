@@ -1,4 +1,4 @@
-\
+#
 # Zero-input: program declares its own sources and sinks
 
 X[p,t]       = "data/prompt.txt"    # text -> Boolean (pos×token) matrix

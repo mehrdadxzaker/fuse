@@ -9,7 +9,7 @@ import pytest
 
 def test_cli_run_smoke(tmp_path: Path):
     examples = Path(__file__).resolve().parent.parent / "examples"
-    program = examples / "04_mlp.fuse"
+    program = examples / "07_cnn_1d.fuse"
     assert program.exists(), "expected example program to exist"
 
     # Run from the examples directory so file sources/sinks resolve
