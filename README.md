@@ -12,11 +12,11 @@ It keeps the code small and readable while covering end-to-end flows (sources â†
 ### Pip
 
 ```bash
-pip install fuse-ai
-pip install fuse-ai[torch]   # Torch FX backend
-pip install fuse-ai[jax]     # JAX backend
-pip install fuse-ai[bench]   # Torch + JAX bundle for benchmarks
-pip install fuse-ai[dev]     # Linting, typing, tests
+pip install fuse
+pip install fuse[torch]   # Torch FX backend
+pip install fuse[jax]     # JAX backend
+pip install fuse[bench]   # Torch + JAX bundle for benchmarks
+pip install fuse[dev]     # Linting, typing, tests
 ```
 
 ### Editable (local development)
@@ -33,7 +33,7 @@ The repository ships a `uv.lock` for reproducible envs. To sync the dev environm
 uv sync --extra dev
 ```
 
-You can swap in other extras (e.g., `--extra torch --extra jax` or `--all-extras`) to mirror the `pip install fuse-ai[...]` flows above.
+You can swap in other extras (e.g., `--extra torch --extra jax` or `--all-extras`) to mirror the `pip install fuse[...]` flows above.
 
 ## Linting & formatting
 

@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fuse-ai"
+name = "fuse"
 version = "0.0.1"
 description = "Fuse: tensor-equation DSL as a library (NumPy backend + Torch/JAX stubs)"
 readme = "README.md"

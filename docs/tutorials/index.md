@@ -32,7 +32,7 @@ These walkthroughs mirror the scripts in `examples/`. Each one demonstrates a si
 </div>
 
 !!! info "Need optional backends?"
-    Install `fuse-ai[torch]` or `fuse-ai[jax]` to enable the Torch FX and JAX runners. Examples automatically fall back to NumPy when a backend is unavailable.
+    Install `fuse[torch]` or `fuse[jax]` to enable the Torch FX and JAX runners. Examples automatically fall back to NumPy when a backend is unavailable.
 
 ## Run a single tutorial
 

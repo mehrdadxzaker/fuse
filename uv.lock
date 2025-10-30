@@ -305,7 +305,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fuse-ai"
+name = "fuse"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
