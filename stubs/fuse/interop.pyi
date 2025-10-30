@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from numpy.typing import NDArray
 import torch
 from _typeshed import Incomplete
+from numpy.typing import NDArray
 
 from .core.policies import RuntimePolicies as RuntimePolicies
 from .core.program import Program as Program
