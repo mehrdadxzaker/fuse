@@ -1,5 +1,7 @@
 # Fuse DSL Reference
 
+[[toc]]
+
 The Fuse front-end is a compact, line-oriented DSL for wiring tensor equations.
 This page collects the syntax in one place so you can skim the affordances
 without spelunking through parser code.

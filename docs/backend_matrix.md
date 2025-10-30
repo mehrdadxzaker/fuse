@@ -1,5 +1,7 @@
 # Backend Support Matrix
 
+[[toc]]
+
 Fuse ships with three execution backends. This matrix summarises what works
 today so you can pick the right engine (or spot missing features before filing
 issues).

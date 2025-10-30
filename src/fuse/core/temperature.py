@@ -195,14 +195,15 @@ def coerce_temperature_value(value: Any) -> float:
             return float(value.item())
         except Exception as exc:  # pragma: no cover - best effort
             raise TypeError("Temperature value must be convertible to float") from exc
-    np: Any
+    np_module: Any
     try:
         import numpy as np  # Lazy import to avoid hard dependency for callers
+        np_module = np
     except Exception:  # pragma: no cover - optional dependency missing
-        np = None
-    if np is not None:
+        np_module = None
+    if np_module is not None:
         try:
-            arr = np.asarray(value)
+            arr = np_module.asarray(value)
             if arr.size != 1:
                 raise ValueError("Temperature value must be scalar")
             return float(arr.reshape(()))
