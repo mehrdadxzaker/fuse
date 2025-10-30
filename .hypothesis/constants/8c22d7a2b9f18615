@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/interop.py
-# hypothesis_version: 6.142.4
-
-['auto', 'dtype', 'dynamic_axes', 'from_pytorch', 'from_safetensors', 'input_names', 'key', 'opset_version', 'order', 'output_names', 'perm', 'single', 'source_axes', 'target_axes', 'to_onnx', 'to_torchscript', 'torch', 'torch.Tensor', 'transpose']

@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/core/builtins.py
-# hypothesis_version: 6.142.4
-
-[0.0, 1e-09, 1e-06, 1e-05, 0.044715, 0.134145, 0.5, 1.0, 2.0, 1024, ',', '.csv', '.json', '.jsonl', '.md', '.npy', '.npz', '.safetensors', '.tsv', '.txt', '.vocab.json', 'arr_0', 'fuse.tensor', 'fuse.topk', 'index', 'items', 'r', 'schema', 'shape', 'token', 'topk', 'utf-8', 'value', 'version', 'w']

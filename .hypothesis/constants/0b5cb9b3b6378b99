@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/inference/grad_builder.py
-# hypothesis_version: 6.142.4
-
-[', ', '=', '[', ']', 'axis', 'const', 'gelu', 'index_specs', 'softmax']

@@ -1,4 +1,0 @@
-# file: /Users/mehrdad/Downloads/fuse/src/fuse/core/cache.py
-# hypothesis_version: 6.142.4
-
-[0.0, ',', '.json', '.npz', '/', '0.0.0', '2', ':', 'ExecutionConfig', 'RuntimePolicies', '[0-9a-f]{64}', '_', '__version__', 'artifact', 'backend', 'bytes', 'cache_version', 'chaining', 'data', 'dataset', 'datasets', 'device', 'dtype', 'execution_config', 'explain_timings', 'extra', 'fingerprint', 'fuse', 'items', 'jax', 'key', 'manifest', 'mapping', 'max_iters', 'metadata', 'mode', 'ndarray', 'normalized', 'numpy', 'payload_meta', 'policies', 'projection_samples', 'projection_seed', 'projection_strategy', 'pyproject.toml', 'r', 'repr', 'sequence', 'shape', 'source', 'temperatures', 'tobytes', 'tol', 'torch', 'type', 'utf-8', 'versions', 'w']
