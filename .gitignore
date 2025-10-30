@@ -10,5 +10,6 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+.hypothesis/
 .DS_Store
 Thumbs.db
