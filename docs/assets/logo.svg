@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title>Fuse</title>
+  <desc>Stylised Fuse logomark</desc>
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3949ab" />
+      <stop offset="100%" stop-color="#ff8f00" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="#0f172a" />
+  <path d="M38 32h28c18 0 30 10 30 27 0 16-11 25-24 25h-18v12h-16V32zm44 27c0-7-5-11-15-11H54v22h13c9 0 15-4 15-11z" fill="url(#gradient)" />
+</svg>

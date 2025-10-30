@@ -1,33 +1,30 @@
-# Fuse CLI Cheatsheet
+# Fuse CLI
 
-Fuse now includes a minimal command-line runner for quick experiments:
-
-```bash
-python -m fuse run program.fuse --backend numpy --out out.npy
-```
+The CLI wraps the Python API for quick experiments and CI smoke tests.
 
 ## Usage
 
 ```text
-usage: python -m fuse run PROGRAM [--backend numpy|torch|jax] [--out PATH]
+python -m fuse run PROGRAM [--backend numpy|torch|jax] [--out PATH] [--cache PATH]
 ```
 
 * `PROGRAM` — path to the `.fuse` file containing your equations.
-* `--backend` — execution backend (`numpy`, `torch`, or `jax`). Defaults to
-  `numpy`.
-* `--out` — optional output file. Supports `.npy`, `.npz`, `.json`, and
-  `.jsonl`. If omitted, the runner prints the first exported tensor to stdout.
+* `--backend` — execution backend (`numpy`, `torch`, or `jax`). Defaults to `numpy`.
+* `--out` — optional output file. Supports `.npy`, `.npz`, `.json`, and `.jsonl`.
+* `--cache` — reuse compiled artifacts by pointing to a directory.
 
-The runner expects the program to declare at least one `export` statement. When
-multiple exports are present and `--out` is omitted, the entire output map is
-rendered as indented JSON.
+!!! example "Run a program"
+    ```bash
+    python -m fuse run examples/05_transformer_block.fuse --backend numpy --out runs/transformer.json
+    ```
 
-Backend-specific notes:
+## Output behaviour
 
-* Torch and JAX require the respective frameworks installed and fall back to
-  the NumPy engine when unavailable.
-* `.npy/.npz` outputs honour `RuntimePolicies` (e.g., memory mapped sources) via
-  the standard program compilation path.
+* Programs must declare at least one `export` statement.
+* When `--out` is omitted, Fuse prints the first exported tensor to stdout.
+* Multiple exports without `--out` emit the full tensor map as pretty-printed JSON.
 
-This utility is intended for CI smoke tests and ad-hoc experimentation; for
-integrated applications prefer the Python API.
+!!! info "Backend availability"
+    Torch and JAX backends are optional. If the frameworks are not installed, Fuse falls back to NumPy automatically.
+
+This utility is intended for CI smoke tests and ad-hoc experimentation; for integrated applications prefer the Python API.

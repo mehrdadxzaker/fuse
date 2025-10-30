@@ -8,13 +8,31 @@ use_directory_urls: true
 theme:
   name: material
   language: en
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  font:
+    text: "Inter"
+    code: "JetBrains Mono"
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: deep orange
+    - scheme: slate
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
   features:
+    - navigation.instant
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - toc.integrate
     - search.suggest
     - search.highlight
     - search.share
+    - content.tabs.link
     - content.code.copy
     - content.action.edit
     - toc.follow
@@ -22,17 +40,19 @@ theme:
     repo: material/github
 
 nav:
-  - Overview: index.md
-  - Get Started: get-started.md
+  - Overview:
+      - Welcome: index.md
+      - Get Started: get-started.md
   - Tutorials:
       - tutorials/index.md
   - How-to Guides:
       - how-to/index.md
   - Concepts:
-      - concepts/index.md
+      - Overview: concepts/index.md
       - DSL Reference: dsl_reference.md
       - Backend Matrix: backend_matrix.md
-  - API Reference: reference/index.md
+  - API Reference:
+      - reference/index.md
   - CLI: cli.md
   - Community: community.md
 
@@ -63,11 +83,16 @@ markdown_extensions:
   - admonition
   - toc:
       permalink: true
+  - attr_list
+  - md_in_html
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.highlight
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  - pymdownx.emoji
 
 extra:
   analytics:
@@ -77,7 +102,9 @@ extra:
   version:
     provider: mike
 
+extra_css:
+  - stylesheets/extra.css
+
 watch:
   - src
   - docs
-

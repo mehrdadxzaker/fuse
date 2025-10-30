@@ -1,44 +1,76 @@
 # Get Started
 
-## Install
+[[toc]]
 
-- Python 3.9+
-- Optional: Torch (`pip install fuse-ai[torch]`) and/or JAX (`pip install fuse-ai[jax]`)
+Fuse targets Python 3.9+ and ships optional extras for Torch and JAX backends. The steps below keep environments reproducible and ensure every snippet stays copy/pasteable.
 
-Using a virtualenv:
+## 1. Choose your installation path
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
+!!! note "Use a clean environment"
+    We recommend creating a fresh virtual environment per project—either `venv`, Conda, or a tool like `uv`. This isolates dependencies and mirrors the CI setup.
 
-Or from PyPI:
+=== "From PyPI"
 
-```bash
-pip install fuse-ai
-# Optional backends
-pip install fuse-ai[torch]
-pip install fuse-ai[jax]
-```
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install fuse-ai
+    ```
 
-## First run
+    Install optional backends as needed:
 
-- Run an example:
+    ```bash
+    pip install "fuse-ai[torch]"
+    pip install "fuse-ai[jax]"
+    ```
+
+=== "Editable checkout"
+
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate
+    git clone https://github.com/mehrdadxzaker/fuse.git
+    cd fuse
+    pip install -e ".[dev]"
+    ```
+
+    The `dev` extras pull in MkDocs tooling, Ruff, MyPy, and pytest so you can run the full CI suite locally.
+
+## 2. Verify the installation
+
+Use the shipped examples to confirm the runtime works end-to-end.
 
 ```bash
 python examples/01_attention_block.py
 ```
 
-- Or execute a `.fuse` program via the CLI:
+Expect logs describing compilation and execution along with saved artifacts under `examples/runs/`.
 
-```bash
-python -m fuse run examples/05_transformer_block.fuse --backend numpy
-```
+!!! tip "Prefer the CLI for quick experiments"
+    ```bash
+    python -m fuse run examples/05_transformer_block.fuse --backend numpy
+    ```
+    Swap `--backend` to `torch` or `jax` once the optional extras are installed. The runner prints the exported tensors or writes them to disk with `--out`.
 
-## Next steps
+## 3. Explore next steps
 
-- Browse the Tutorials to run the full example gallery
-- See How‑to guides for exporting (TorchScript/ONNX), caching, and policies
-- Explore Concepts for the DSL reference and backend capabilities
+<div class="grid cards" markdown>
 
+-   __Inspect execution__  
+    Call [`Program.explain()`](reference/fuse/core/program/index.md) to capture intermediate tensors and fixpoint iterations.
+-   __Enable caching__  
+    Reuse compiled graphs by passing `cache_dir=".cache"` to `Program.compile`.
+-   __Extend policies__  
+    Configure `RuntimePolicies` for sharding, quantisation, LoRA adapters, and manifest-backed weight stores.
+
+</div>
+
+## Troubleshooting checklist
+
+??? info "Common fixes"
+    - Ensure the virtual environment is activated when installing extras.
+    - Re-run `pip install -e ".[dev]"` after pulling new dependencies.
+    - Use `pip install --upgrade pip` if installers complain about old wheels.
+    - Optional backends are lazy-imported; missing Torch/JAX simply fall back to NumPy.
+
+Need help? Swing by the [Community page](community.md) for contribution guidelines and support channels.
