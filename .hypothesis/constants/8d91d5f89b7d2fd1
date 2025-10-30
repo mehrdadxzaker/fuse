@@ -1,0 +1,4 @@
+# file: /Users/mehrdad/Downloads/fuse/src/fuse/core/ir.py
+# hypothesis_version: 6.142.4
+
+[' | ', ',', '-', 'IndexSpec', 'LHS', 'RHS+', 'dang', 'dangling', 'lhs', 'proj', 'projected', 'rhs_only', 'sum']
