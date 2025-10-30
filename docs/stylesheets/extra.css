@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  --md-text-font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --md-code-font: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+  --md-primary-fg-color: #3949ab;
+  --md-primary-fg-color--light: #6573ff;
+  --md-primary-fg-color--dark: #1a237e;
+  --md-accent-fg-color: #ff8f00;
+}
+
+.hero-grid {
+  display: grid;
+  gap: 1.2rem;
+}
+
+@media (min-width: 768px) {
+  .hero-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.md-typeset .grid.cards > ul {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.md-typeset .grid.cards .card {
+  border-radius: 0.6rem;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards .card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.md-typeset h1,
+.md-typeset h2 {
+  font-weight: 600;
+}
+
+.md-typeset pre > code {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.md-typeset .admonition {
+  border-radius: 0.6rem;
+}
+
+.md-nav__title {
+  font-weight: 600;
+}
+
+.md-typeset .tabbed-labels {
+  font-weight: 500;
+}
+
+.md-header__title {
+  font-weight: 600;
+}
