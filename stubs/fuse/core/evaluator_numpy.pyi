@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from numpy.typing import NDArray
 from _typeshed import Incomplete
+from numpy.typing import NDArray
 
 from .builtins import SparseBoolTensor as SparseBoolTensor
 from .builtins import attention as attention

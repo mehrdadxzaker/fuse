@@ -3,9 +3,9 @@ from __future__ import annotations
 import inspect
 import io
 import math
+from contextlib import nullcontext as _nullcontext
 from dataclasses import replace
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
-from contextlib import nullcontext as _nullcontext
 
 import numpy as np
 

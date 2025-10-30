@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 import numpy as np
-from numpy.typing import NDArray
 import torch
 from _typeshed import Incomplete
+from numpy.typing import NDArray
 
 from .exceptions import BackendError as BackendError
 
