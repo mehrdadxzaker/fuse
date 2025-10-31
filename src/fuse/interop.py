@@ -155,7 +155,8 @@ if torch is not None:  # pragma: no cover - defined only when torch is available
                 if not isinstance(value, torch.Tensor):
                     value = torch.as_tensor(value, device=self.runner.device)
                 else:
-                    value = value.to(self.runner.device)
+                    if value.device != self.runner.device:
+                        value = value.to(self.runner.device)
                 tensor_inputs[name] = value
             cfg = replace(self.runner.config, mode="single")
             outputs = self.runner.run(inputs=tensor_inputs, config=cfg, skip_sinks=True)
