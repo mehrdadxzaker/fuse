@@ -1515,31 +1515,174 @@ class TorchRunner:
         if name == "attention":
             if len(args_expr) < 3:
                 raise ValueError("attention requires query, key, and value arguments")
-            query = self._as_tensor(eval_arg(args_expr[0]))
-            key = self._as_tensor(eval_arg(args_expr[1]))
-            value = self._as_tensor(eval_arg(args_expr[2]))
+            q_in = self._as_tensor(eval_arg(args_expr[0]))
+            k_in = self._as_tensor(eval_arg(args_expr[1]))
+            v_in = self._as_tensor(eval_arg(args_expr[2]))
+            # Inline shape promotion to keep FX graphable
+            q_dim = q_in.dim()
+            if q_dim == 4:
+                q = q_in
+            elif q_dim == 3:
+                q = q_in.unsqueeze(1)
+            elif q_dim == 2:
+                q = q_in.unsqueeze(0).unsqueeze(0)
+            else:
+                raise ValueError("attention expects tensors with rank >= 2")
+            k_dim = k_in.dim()
+            if k_dim == 4:
+                k = k_in
+            elif k_dim == 3:
+                k = k_in.unsqueeze(1)
+            elif k_dim == 2:
+                k = k_in.unsqueeze(0).unsqueeze(0)
+            else:
+                raise ValueError("attention expects tensors with rank >= 2")
+            v_dim = v_in.dim()
+            if v_dim == 4:
+                v = v_in
+            elif v_dim == 3:
+                v = v_in.unsqueeze(1)
+            elif v_dim == 2:
+                v = v_in.unsqueeze(0).unsqueeze(0)
+            else:
+                raise ValueError("attention expects tensors with rank >= 2")
+
+            # Mask handling
             mask_expr: Optional[Any] = None
             if len(args_expr) > 3:
                 mask_expr = args_expr[3]
             elif "mask" in fn.kwargs:
                 mask_expr = fn.kwargs.get("mask")
-            mask_tensor = None
+            attn_mask = None
             if mask_expr is not None:
                 mask_value = self._eval(mask_expr, lhs=lhs)
-                mask_tensor = self._as_tensor(mask_value)
+                m = self._as_tensor(mask_value)
+                if m.dtype != torch.bool:
+                    m = m != 0
+                while m.dim() < 4:
+                    m = m.unsqueeze(0)
+                attn_mask = m.to(device=q.device)
+
+            # Scale handling
             scale_expr = fn.kwargs.get("scale")
-            scale_value = self._eval(scale_expr, lhs=lhs) if scale_expr is not None else None
-            if isinstance(scale_value, str):
-                scale_value = self.tensors.get(scale_value)
+            raw_scale = self._eval(scale_expr, lhs=lhs) if scale_expr is not None else None
+            if isinstance(raw_scale, str):
+                raw_scale = self.tensors.get(raw_scale)
+            scale_value: Optional[float]
+            if raw_scale is None:
+                scale_value = None
+            elif isinstance(raw_scale, torch.Tensor):
+                if raw_scale.numel() != 1:
+                    raise ValueError("Attention scale must be a scalar tensor")
+                scale_value = float(raw_scale.detach().cpu().reshape(()).item())
+            elif isinstance(raw_scale, np.ndarray):
+                if raw_scale.size != 1:
+                    raise ValueError("Attention scale must be a scalar array")
+                scale_value = float(raw_scale.reshape(()))
+            else:
+                scale_value = float(raw_scale)
             causal = bool(fn.kwargs.get("causal", False))
-            return _torch_attention(
-                query,
-                key,
-                value,
-                mask=mask_tensor,
-                scale=scale_value,
-                causal=causal,
+
+            # Apply scale either via argument or by pre-scaling query
+            scaled_query = q
+            if scale_value is not None and not _HAS_SDP_SCALE:
+                head_dim = q.shape[-1]
+                scaled_query = q * (scale_value * math.sqrt(head_dim))
+                scale_arg = None
+            else:
+                scale_arg = scale_value if _HAS_SDP_SCALE else None
+
+            # Prefer CUDA SDP kernels when available
+            use_cuda_sdpa_ctx = (
+                hasattr(torch, "backends")
+                and hasattr(torch.backends, "cuda")
+                and hasattr(torch.backends.cuda, "sdp_kernel")
+                and q.is_cuda
+                and q.dtype in {torch.float16, torch.bfloat16, torch.float32}
             )
+            try:
+                if use_cuda_sdpa_ctx:
+                    with torch.backends.cuda.sdp_kernel(  # type: ignore[attr-defined]
+                        enable_flash=True, enable_mem_efficient=True, enable_math=False
+                    ):
+                        try:
+                            out = F.scaled_dot_product_attention(
+                                scaled_query,
+                                k,
+                                v,
+                                attn_mask=attn_mask,
+                                dropout_p=0.0,
+                                is_causal=causal,
+                                scale=scale_arg if _HAS_SDP_SCALE else None,
+                            )
+                        except TypeError:
+                            out = F.scaled_dot_product_attention(
+                                scaled_query,
+                                k,
+                                v,
+                                attn_mask=attn_mask,
+                                dropout_p=0.0,
+                                is_causal=causal,
+                            )
+                else:
+                    try:
+                        out = F.scaled_dot_product_attention(
+                            scaled_query,
+                            k,
+                            v,
+                            attn_mask=attn_mask,
+                            dropout_p=0.0,
+                            is_causal=causal,
+                            scale=scale_arg if _HAS_SDP_SCALE else None,
+                        )
+                    except TypeError:
+                        out = F.scaled_dot_product_attention(
+                            scaled_query,
+                            k,
+                            v,
+                            attn_mask=attn_mask,
+                            dropout_p=0.0,
+                            is_causal=causal,
+                        )
+            except Exception:
+                math_ctx = (
+                    torch.backends.cuda.sdp_kernel(  # type: ignore[attr-defined]
+                        enable_flash=False, enable_mem_efficient=False, enable_math=True
+                    )
+                    if hasattr(torch, "backends")
+                    and hasattr(torch.backends, "cuda")
+                    and hasattr(torch.backends.cuda, "sdp_kernel")
+                    and q.is_cuda
+                    else _nullcontext()
+                )
+                with math_ctx:
+                    try:
+                        out = F.scaled_dot_product_attention(
+                            scaled_query,
+                            k,
+                            v,
+                            attn_mask=attn_mask,
+                            dropout_p=0.0,
+                            is_causal=causal,
+                            scale=scale_arg if _HAS_SDP_SCALE else None,
+                        )
+                    except TypeError:
+                        out = F.scaled_dot_product_attention(
+                            scaled_query,
+                            k,
+                            v,
+                            attn_mask=attn_mask,
+                            dropout_p=0.0,
+                            is_causal=causal,
+                        )
+
+            # Restore original rank
+            if q_dim == 4:
+                return out
+            if q_dim == 3:
+                return out.squeeze(1)
+            # q_dim == 2
+            return out.squeeze(0).squeeze(0)
         if name == "tucker_dense":
             if not args_expr:
                 raise ValueError("tucker_dense requires a tensor argument")
