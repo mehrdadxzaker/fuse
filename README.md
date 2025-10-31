@@ -107,4 +107,3 @@ Artifacts (sources, IR, simple plans, outputs) are written into `runs/` under ea
 - Torch/JAX backends embed sources as constants; dynamic data loaders will need additional plumbed inputs.
 - Policy hooks surface structure but do not yet include end-to-end distributed sharding or quant-aware training loops.
 
-This remains a **starter** that you can extend toward production backends.
