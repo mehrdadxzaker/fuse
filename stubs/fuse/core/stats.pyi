@@ -1,3 +1,9 @@
 from typing import Sequence
 
-def compute_einsum_stats(equation: str, operand_shapes: Sequence[Sequence[int]], operand_itemsizes: Sequence[int], result_shape: Sequence[int], result_itemsize: int) -> dict[str, float]: ...
+def compute_einsum_stats(
+    equation: str,
+    operand_shapes: Sequence[Sequence[int]],
+    operand_itemsizes: Sequence[int],
+    result_shape: Sequence[int],
+    result_itemsize: int,
+) -> dict[str, float]: ...

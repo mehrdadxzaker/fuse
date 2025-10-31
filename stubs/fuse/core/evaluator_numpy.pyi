@@ -95,7 +95,12 @@ class NumpyRunner:
     tensor_static_indices: dict[str, tuple[str, ...]]
     stream_storage: dict[str, _StreamRingStore]
     stream_positions: dict[str, int]
-    def __init__(self, ir: ProgramIR, config: ExecutionConfig | None = None, policies: RuntimePolicies | None = None) -> None: ...
+    def __init__(
+        self,
+        ir: ProgramIR,
+        config: ExecutionConfig | None = None,
+        policies: RuntimePolicies | None = None,
+    ) -> None: ...
     def __call__(
         self,
         *,
@@ -114,7 +119,12 @@ class NumpyRunner:
     def temperature_manifest(self) -> dict[str, Any]: ...
 
 class DemandNumpyRunner(NumpyRunner):
-    def __init__(self, ir: ProgramIR, config: ExecutionConfig | None = None, policies: RuntimePolicies | None = None) -> None: ...
+    def __init__(
+        self,
+        ir: ProgramIR,
+        config: ExecutionConfig | None = None,
+        policies: RuntimePolicies | None = None,
+    ) -> None: ...
     def run(
         self,
         *,

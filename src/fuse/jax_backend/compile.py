@@ -218,7 +218,7 @@ def _jax_attention(query, key, value, mask=None, scale=None, causal=False):
 def _coerce_scalar(value) -> float:
     if isinstance(value, (int, float, np.integer, np.floating)):
         return float(value)
-    if hasattr(value, "shape") and getattr(value, "shape") == () and hasattr(value, "reshape"):
+    if hasattr(value, "shape") and value.shape == () and hasattr(value, "reshape"):
         reshaped = value.reshape(())
         try:
             return float(reshaped)
@@ -1380,10 +1380,7 @@ def _jax_topk(array: jnp.ndarray, k: int):
     values_arr = np.asarray(values_host)
     indices_arr = np.asarray(indices_host)
     if values_arr.ndim == 1:
-        return [
-            (int(indices_arr[i]), float(values_arr[i]))
-            for i in range(values_arr.shape[0])
-        ]
+        return [(int(indices_arr[i]), float(values_arr[i])) for i in range(values_arr.shape[0])]
     results = []
     for row_idx in range(values_arr.shape[0]):
         row = []

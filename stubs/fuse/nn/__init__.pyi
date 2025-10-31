@@ -9,7 +9,6 @@ def attention_block() -> Program: ...
 TRANSFORMER_SOURCES: tuple[str, ...]
 
 def transformer_encoder() -> Program: ...
-
 @dataclass(frozen=True)
 class _GNNSpec:
     num_layers: int

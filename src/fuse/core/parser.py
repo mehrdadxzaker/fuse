@@ -224,9 +224,7 @@ class FuseTransformer(Transformer):
                     self._error_token(token, "Invalid slice specifier")
                 start = self._parse_slice_bound(parts[0], token)
                 stop = self._parse_slice_bound(parts[1], token)
-                step = (
-                    self._parse_slice_bound(parts[2], token) if len(parts) == 3 else None
-                )
+                step = self._parse_slice_bound(parts[2], token) if len(parts) == 3 else None
                 slice_spec = SliceSpec(start=start, stop=stop, step=step)
                 axis_name = ":".join(part for part in parts)
             else:
@@ -248,9 +246,7 @@ class FuseTransformer(Transformer):
         lower_name = name_token.value.lower()
         if suffix.is_paren and lower_name in INDEX_FUNCTION_NAMES:
             if len(specs) != 1:
-                self._error_token(
-                    suffix.tokens[0], f"{name_token.value} requires exactly one axis"
-                )
+                self._error_token(suffix.tokens[0], f"{name_token.value} requires exactly one axis")
             if dotted_axes:
                 self._error_token(
                     suffix.tokens[0],
@@ -266,9 +262,7 @@ class FuseTransformer(Transformer):
                     suffix.tokens[0], f"{name_token.value} axis does not support offsets"
                 )
             if spec.axis.startswith("*"):
-                self._error_token(
-                    suffix.tokens[0], f"{name_token.value} axis cannot be streaming"
-                )
+                self._error_token(suffix.tokens[0], f"{name_token.value} axis cannot be streaming")
             return IndexFunction(name=lower_name, axis=spec.axis)
 
         return TensorRef(
@@ -650,10 +644,7 @@ def _expr_signature(expr: Any) -> Any:
             "func",
             expr.name,
             _object_signature(expr.arg),
-            tuple(
-                (key, _object_signature(val))
-                for key, val in sorted(expr.kwargs.items())
-            ),
+            tuple((key, _object_signature(val)) for key, val in sorted(expr.kwargs.items())),
         )
     if isinstance(expr, IndexFunction):
         return ("index_fn", expr.name, expr.axis)
@@ -695,7 +686,11 @@ def _build_program_ir(nodes: ProgramNodes) -> ProgramIR:
                     column=statement.column,
                     line_text=statement.source,
                 )
-            if len(statement.rhs_terms) == 1 and isinstance(statement.rhs_terms[0], str) and statement.op == "=":
+            if (
+                len(statement.rhs_terms) == 1
+                and isinstance(statement.rhs_terms[0], str)
+                and statement.op == "="
+            ):
                 lhs = _clone_tensor_ref(statement.lhs)
                 equations.append(
                     Equation(

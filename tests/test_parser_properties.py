@@ -373,7 +373,7 @@ def _index_function_component_strategy():
         fn_name = draw(st.sampled_from(["Even", "Odd"]))
         axis_symbol = draw(st.sampled_from(_HYPOTHESIS_AXES))
         if draw(st.booleans()):
-            text = f"{fn_name}(axis=\"{axis_symbol}\")"
+            text = f'{fn_name}(axis="{axis_symbol}")'
         else:
             text = f"{fn_name}({axis_symbol})"
         return Component(text=text, axes=[axis_symbol])

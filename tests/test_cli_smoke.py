@@ -34,4 +34,3 @@ def test_cli_run_smoke(tmp_path: Path):
     )
     if proc.returncode != 0:
         pytest.fail(f"CLI failed: {proc.returncode}\n{proc.stdout}\n{proc.stderr}")
-

@@ -38,6 +38,7 @@ try:
     import torch.nn.functional as F
     from torch.fx import GraphModule, symbolic_trace
     from torch.fx.passes.shape_prop import ShapeProp
+
     try:
         from torch.fx.proxy import Proxy as FxProxy  # type: ignore
     except Exception:  # pragma: no cover - optional import path differences
@@ -486,8 +487,13 @@ def _torch_attention(
     except Exception:
         # Retry with math fallback if optimized kernels are unavailable
         math_ctx = (
-            torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True)  # type: ignore[attr-defined]
-            if hasattr(torch, "backends") and hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "sdp_kernel") and q.is_cuda
+            torch.backends.cuda.sdp_kernel(
+                enable_flash=False, enable_mem_efficient=False, enable_math=True
+            )  # type: ignore[attr-defined]
+            if hasattr(torch, "backends")
+            and hasattr(torch.backends, "cuda")
+            and hasattr(torch.backends.cuda, "sdp_kernel")
+            and q.is_cuda
             else _nullcontext()
         )
         with math_ctx:
@@ -775,14 +781,19 @@ class TorchRunner:
                     shape = tuple(int(s) for s in arr.shape)
                     dtype_str = str(arr.dtype)
                     tensor_val = _tensor_from_numpy_safe(
-                        arr, device=self.device, target_dtype=self.default_dtype, zero_copy=self.zero_copy
+                        arr,
+                        device=self.device,
+                        target_dtype=self.default_dtype,
+                        zero_copy=self.zero_copy,
                     )
                 sig_items.append((name, shape, dtype_str))
                 input_feed_for_trace[name] = tensor_val
             fx_sig = tuple(sorted(sig_items, key=lambda x: x[0]))
 
             if getattr(self, "_fx_sig_key", None) != fx_sig:
-                module = self._load_or_build_fx(input_signature=fx_sig, input_feed=input_feed_for_trace)
+                module = self._load_or_build_fx(
+                    input_signature=fx_sig, input_feed=input_feed_for_trace
+                )
                 self.fx_module = module
                 self._fx_sig_key = fx_sig
                 if module is not None:
@@ -898,7 +909,7 @@ class TorchRunner:
 
     def _ensure_boolean_tensor(self, name: str, tensor: torch.Tensor) -> torch.Tensor:
         # Avoid dtype branching on FX proxies; emit a single to() call instead
-        if 'FxProxy' in globals() and FxProxy is not None and isinstance(tensor, FxProxy):  # type: ignore[name-defined]
+        if "FxProxy" in globals() and FxProxy is not None and isinstance(tensor, FxProxy):  # type: ignore[name-defined]
             tensor = tensor.to(device=self.device, dtype=self.default_dtype)
         else:
             if tensor.device != self.device:
@@ -1694,7 +1705,7 @@ class TorchRunner:
                 tensor = tensor.to(dtype=self.default_dtype)
             return tensor
         # Allow FX tracing proxies to flow through without numpy conversion
-        if 'FxProxy' in globals() and FxProxy is not None and isinstance(value, FxProxy):  # type: ignore[name-defined]
+        if "FxProxy" in globals() and FxProxy is not None and isinstance(value, FxProxy):  # type: ignore[name-defined]
             try:
                 return value.to(device=self.device, dtype=self.default_dtype)  # type: ignore[return-value]
             except Exception:
@@ -1784,7 +1795,12 @@ class TorchRunner:
         raise ValueError(f"Cannot resolve axis specification: {spec}")
 
     # FX Graph ----------------------------------------------------------------
-    def _load_or_build_fx(self, *, input_signature: Optional[Tuple[Any, ...]] = None, input_feed: Optional[Dict[str, Any]] = None) -> Optional[GraphModule]:
+    def _load_or_build_fx(
+        self,
+        *,
+        input_signature: Optional[Tuple[Any, ...]] = None,
+        input_feed: Optional[Dict[str, Any]] = None,
+    ) -> Optional[GraphModule]:
         if self.cache_manager is None or GraphModule is None:
             return self._build_fx(input_feed=input_feed)
 
@@ -1861,7 +1877,9 @@ if torch is not None:
             finally:
                 self.runner.config = prev_cfg
                 self.runner.zero_copy = prev_zero_copy
-                self.runner.default_dtype = _resolve_precision_dtype(prev_cfg.precision, self.runner.device)
+                self.runner.default_dtype = _resolve_precision_dtype(
+                    prev_cfg.precision, self.runner.device
+                )
                 self.runner._temperature_schedules = prev_temps
             return tuple(outputs[name] for name in self.runner.ir.exports)
 

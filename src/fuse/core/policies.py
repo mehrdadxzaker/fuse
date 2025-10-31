@@ -1557,9 +1557,10 @@ class HTTPWeightStore(_RemoteWeightStoreBase):
         tmp_path = target_path.with_name(f"{target_path.name}.{uuid.uuid4().hex}.tmp")
         tmp_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with urllib_request.urlopen(request_obj, timeout=self._timeout) as response, tmp_path.open(
-                "wb"
-            ) as fh:
+            with (
+                urllib_request.urlopen(request_obj, timeout=self._timeout) as response,
+                tmp_path.open("wb") as fh,
+            ):
                 shutil.copyfileobj(response, fh)
         except urllib_error.HTTPError as exc:
             tmp_path.unlink(missing_ok=True)
@@ -1644,9 +1645,7 @@ class S3WeightStore(_RemoteWeightStoreBase):
                 raise FileNotFoundError(
                     f"S3 object for weight '{name}' not found (bucket={self.bucket}, key={spec['key']})"
                 ) from exc
-            raise RuntimeError(
-                f"Failed to query S3 metadata for weight '{name}': {exc}"
-            ) from exc
+            raise RuntimeError(f"Failed to query S3 metadata for weight '{name}': {exc}") from exc
         etag = response.get("ETag")
         size_raw = response.get("ContentLength")
         try:
@@ -1678,9 +1677,7 @@ class S3WeightStore(_RemoteWeightStoreBase):
             response = self._client.get_object(**params)
         except Exception as exc:
             tmp_path.unlink(missing_ok=True)
-            raise RuntimeError(
-                f"Failed to download S3 object for weight '{name}': {exc}"
-            ) from exc
+            raise RuntimeError(f"Failed to download S3 object for weight '{name}': {exc}") from exc
         body = response.get("Body")
         if body is None:
             tmp_path.unlink(missing_ok=True)

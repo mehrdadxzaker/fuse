@@ -216,7 +216,7 @@ class Program:
 
         # A simple workload score: einsums and attention weigh more
         score = einsum_terms + op_count + (3 if has_attention else 0)
-        small_workload = (equations <= 3 and score <= 2)
+        small_workload = equations <= 3 and score <= 2
 
         target = (cfg.device or "auto").lower()
 
@@ -228,12 +228,11 @@ class Program:
 
             torch_available = _torch is not None
             torch_gpu_or_mps = (
-                (_torch.cuda.is_available() if hasattr(_torch, "cuda") else False)
-                or (
-                    hasattr(_torch, "backends")
-                    and hasattr(_torch.backends, "mps")
-                    and bool(_torch.backends.mps.is_available())
-                )
+                _torch.cuda.is_available() if hasattr(_torch, "cuda") else False
+            ) or (
+                hasattr(_torch, "backends")
+                and hasattr(_torch.backends, "mps")
+                and bool(_torch.backends.mps.is_available())
             )
         except Exception:  # pragma: no cover - torch optional
             torch_available = False
@@ -255,10 +254,16 @@ class Program:
             jax_has_gpu = False
 
         # GPU/MPS targets ------------------------------------------------------
-        wants_gpu_like = target.startswith("cuda") or target == "mps" or (target == "auto" and (torch_gpu_or_mps or jax_has_gpu))
+        wants_gpu_like = (
+            target.startswith("cuda")
+            or target == "mps"
+            or (target == "auto" and (torch_gpu_or_mps or jax_has_gpu))
+        )
         if not small_workload and wants_gpu_like:
             # Prefer Torch for attention/DL-like programs when available
-            if torch_available and (torch_gpu_or_mps or target.startswith("cuda") or target == "mps"):
+            if torch_available and (
+                torch_gpu_or_mps or target.startswith("cuda") or target == "mps"
+            ):
                 return "torch"
             if jax_available and (jax_has_gpu or target == "auto"):
                 return "jax"

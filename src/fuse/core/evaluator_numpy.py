@@ -449,7 +449,9 @@ class NumpyRunner:
                 flops = eq.get("flops")
                 bytes_total = eq.get("bytes_total")
                 flops_str = _format_metric(flops, "flops") if flops is not None else None
-                bytes_str = _format_metric(bytes_total, "bytes") if bytes_total is not None else None
+                bytes_str = (
+                    _format_metric(bytes_total, "bytes") if bytes_total is not None else None
+                )
                 if flops_str:
                     details.append(flops_str)
                 if bytes_str:
@@ -569,12 +571,8 @@ class NumpyRunner:
         self._last_temperatures.clear()
         self._active_equation_temperature = None
         self._sig_temperatures.clear()
-        self._group_contrib_cache = {
-            name: [None] * len(eqs) for name, eqs in self._groups
-        }
-        self._group_meta_cache = {
-            name: [None] * len(eqs) for name, eqs in self._groups
-        }
+        self._group_contrib_cache = {name: [None] * len(eqs) for name, eqs in self._groups}
+        self._group_meta_cache = {name: [None] * len(eqs) for name, eqs in self._groups}
 
     def _reset_rng(self, cfg: ExecutionConfig):
         seed = getattr(cfg, "projection_seed", None)
@@ -1526,7 +1524,7 @@ class NumpyRunner:
         if block_dim is None:
             raise ValueError(f"Unknown axis length for projected index '{block_index}'")
         if block_dim <= 0:
-            zero_shape = arrays[0].shape[: axes_start] if arrays else ()
+            zero_shape = arrays[0].shape[:axes_start] if arrays else ()
             return np.zeros(zero_shape, dtype=np.float32), {"blocked": {"axis": block_index}}
         block = max(1, min(int(block_size), int(block_dim)))
         inputs, output = equation.split("->")
@@ -1560,11 +1558,15 @@ class NumpyRunner:
             elif projection == "max":
                 chunk_reduced = self._reduce_extended_raw(chunk_raw, axes_start, projection="max")
                 total_result = (
-                    chunk_reduced if total_result is None else np.maximum(total_result, chunk_reduced)
+                    chunk_reduced
+                    if total_result is None
+                    else np.maximum(total_result, chunk_reduced)
                 )
             else:
                 chunk_reduced = self._reduce_extended_raw(chunk_raw, axes_start, projection="sum")
-                total_result = chunk_reduced if total_result is None else total_result + chunk_reduced
+                total_result = (
+                    chunk_reduced if total_result is None else total_result + chunk_reduced
+                )
         if projection == "mean":
             if total_sum is None or total_count == 0:
                 raise ValueError("Unable to compute mean for empty projection")

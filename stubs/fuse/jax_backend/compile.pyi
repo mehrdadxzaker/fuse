@@ -14,5 +14,4 @@ def compile(
     **_: Any,
 ) -> Any: ...
 
-
 __all__ = ["compile"]
