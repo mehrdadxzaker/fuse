@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import string
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -72,6 +73,34 @@ def _to_numpy_array(value: Any) -> np.ndarray:
     if isinstance(value, SparseBoolTensor):
         return value.to_dense()
     return np.asarray(value)
+
+
+# Small LRU cache for einsum paths -------------------------------------------
+_EINSUM_PATH_CACHE: "OrderedDict[tuple, Any]" = OrderedDict()
+_EINSUM_PATH_CACHE_MAX: int = 256
+
+
+def _EINSUM_PATH_CACHE_get(key: tuple):
+    path = _EINSUM_PATH_CACHE.get(key)
+    if path is not None:
+        # Mark as recently used
+        try:
+            _EINSUM_PATH_CACHE.move_to_end(key)
+        except Exception:
+            pass
+    return path
+
+
+def _EINSUM_PATH_CACHE_put(key: tuple, path: Any) -> None:
+    if key in _EINSUM_PATH_CACHE:
+        _EINSUM_PATH_CACHE.move_to_end(key)
+    _EINSUM_PATH_CACHE[key] = path
+    if len(_EINSUM_PATH_CACHE) > _EINSUM_PATH_CACHE_MAX:
+        try:
+            _EINSUM_PATH_CACHE.popitem(last=False)
+        except Exception:
+            # Best-effort eviction
+            pass
 
 
 class _StreamRingStore:
@@ -235,6 +264,7 @@ class ExecutionConfig:
     jax_cache_dir: Optional[str] = None
     validate_device_transfers: bool = False
     block_size: Optional[int] = None
+    einsum_planner: str = "auto"  # "auto" | "greedy" | "optimal"
 
     def normalized(self) -> "ExecutionConfig":
         mode = self.mode.lower()
@@ -273,6 +303,9 @@ class ExecutionConfig:
             block_size = int(block_size)
             if block_size <= 0:
                 raise ValueError("block_size must be positive when provided")
+        planner = (self.einsum_planner or "auto").lower()
+        if planner not in {"auto", "greedy", "optimal"}:
+            raise ValueError(f"Unsupported einsum_planner: {self.einsum_planner}")
         return replace(
             self,
             mode=mode,
@@ -289,6 +322,7 @@ class ExecutionConfig:
             jax_cache_dir=cache_dir,
             validate_device_transfers=validate_transfers,
             block_size=block_size,
+            einsum_planner=planner,
         )
 
 
@@ -591,6 +625,93 @@ class NumpyRunner:
         if not self._is_boolean_tensor(name):
             return arr
         return step(arr)
+
+    # ------------------------------------------------------------------
+    # Einsum planning and caching
+    # ------------------------------------------------------------------
+
+    def _arrays_signature(self, arrays: Sequence[np.ndarray]) -> tuple:
+        shapes: List[Tuple[int, ...]] = []
+        dtypes: List[str] = []
+        for arr in arrays:
+            arr_np = _to_numpy_array(arr)
+            shapes.append(tuple(int(dim) for dim in arr_np.shape))
+            dtypes.append(str(arr_np.dtype))
+        return tuple(shapes), tuple(dtypes)
+
+    def _estimate_io_bytes(self, equation: str, arrays: Sequence[np.ndarray]) -> int:
+        # Estimate bytes_in + bytes_out using operand shapes/dtypes and
+        # output labels derived from the equation.
+        shapes: List[Tuple[int, ...]] = []
+        itemsizes: List[int] = []
+        for arr in arrays:
+            arr_np = _to_numpy_array(arr)
+            shapes.append(tuple(int(dim) for dim in arr_np.shape))
+            itemsizes.append(int(arr_np.dtype.itemsize))
+
+        # Parse equation for output labels (works for explicit or implicit outputs)
+        dims: dict[str, int] = {}
+        counts: dict[str, int] = {}
+        input_part, output_part = (equation.split("->", 1) + [None])[:2]
+        inputs = input_part.split(",") if input_part else []
+        for labels, shape in zip(inputs, shapes):
+            if len(labels) != len(shape):
+                continue
+            for label, dim in zip(labels, shape):
+                dims[label] = int(dim)
+                counts[label] = counts.get(label, 0) + 1
+        if output_part is not None and len(output_part) > 0:
+            output_labels = list(output_part)
+        else:
+            output_labels = []
+            seen: set[str] = set()
+            for labels in inputs:
+                for label in labels:
+                    if counts.get(label, 0) == 1 and label not in seen:
+                        seen.add(label)
+                        output_labels.append(label)
+
+        def _prod(vals: Sequence[int]) -> int:
+            p = 1
+            for v in vals:
+                p *= int(max(1, v))
+            return int(p)
+
+        bytes_in = 0
+        for shape, item in zip(shapes, itemsizes):
+            bytes_in += _prod(shape) * int(item)
+        if output_labels:
+            out_elems = _prod(dims.get(label, 1) for label in output_labels)
+        else:
+            out_elems = 1
+        result_itemsize = max(itemsizes) if itemsizes else 4
+        bytes_out = int(out_elems) * int(result_itemsize)
+        return int(bytes_in + bytes_out)
+
+    def _choose_planner_mode(self, equation: str, arrays: Sequence[np.ndarray]) -> str:
+        mode = getattr(self.config, "einsum_planner", "auto")
+        if mode in {"greedy", "optimal"}:
+            return mode
+        # auto: choose based on operand count and estimated IO size
+        shapes, _ = self._arrays_signature(arrays)
+        if len(shapes) <= 2:
+            return "optimal"
+        total_bytes = self._estimate_io_bytes(equation, arrays)
+        # Use a conservative threshold; default to greedy when large
+        threshold = 128 * 1024 * 1024  # 128 MB
+        return "optimal" if total_bytes < threshold else "greedy"
+
+    def _resolve_einsum_path(self, equation: str, arrays: Sequence[np.ndarray]):
+        planner = self._choose_planner_mode(equation, arrays)
+        shapes_key, dtypes_key = self._arrays_signature(arrays)
+        key = (planner, equation, shapes_key, dtypes_key)
+        path = _EINSUM_PATH_CACHE_get(key)
+        if path is not None:
+            return path
+        # Compute and cache
+        path = np.einsum_path(equation, *arrays, optimize=planner)[0]
+        _EINSUM_PATH_CACHE_put(key, path)
+        return path
 
     # Streaming helpers ---------------------------------------------------------
     def _analyze_streaming(self):
@@ -1383,7 +1504,7 @@ class NumpyRunner:
                     extended_index_map,
                 ) = _normalized_einsum(term, extended_lhs)
             extended_arrays = _ordered_arrays(extended_order or factor_order)
-            path = np.einsum_path(extended_equation, *extended_arrays, optimize="optimal")[0]
+            path = self._resolve_einsum_path(extended_equation, extended_arrays)
             raw = np.einsum(extended_equation, *extended_arrays, optimize=path)
             shapes, itemsizes = _array_shapes_and_sizes(extended_arrays)
             stats = compute_einsum_stats(
@@ -1411,7 +1532,7 @@ class NumpyRunner:
                     extended_index_map,
                 ) = _normalized_einsum(term, extended_lhs)
             extended_arrays = _ordered_arrays(extended_order or factor_order)
-            path = np.einsum_path(extended_equation, *extended_arrays, optimize="optimal")[0]
+            path = self._resolve_einsum_path(extended_equation, extended_arrays)
             block_size = getattr(self.config, "block_size", None)
             use_blocking = (
                 block_size is not None
@@ -1458,7 +1579,7 @@ class NumpyRunner:
             )
             meta.update(stats)
         else:
-            base_path = np.einsum_path(base_equation, *base_arrays, optimize="optimal")[0]
+            base_path = self._resolve_einsum_path(base_equation, base_arrays)
             result = np.einsum(base_equation, *base_arrays, optimize=base_path)
             meta = {"einsum": base_equation, "projected": projected}
             if projection != "sum":
