@@ -7,7 +7,7 @@ class TensorRef:
     indices: list[str]
     dotted_axes: list[str] = field(default_factory=list)
     rolling: dict[str, int] = field(default_factory=dict)
-    index_specs: list['IndexSpec'] = field(default_factory=list)
+    index_specs: list["IndexSpec"] = field(default_factory=list)
     is_paren: bool = ...
 
 @dataclass
@@ -36,6 +36,7 @@ class FuncCall:
 class IndexFunction:
     name: str
     axis: str
+
 Expr = Any
 
 @dataclass

@@ -198,6 +198,7 @@ def coerce_temperature_value(value: Any) -> float:
     np_module: Any
     try:
         import numpy as np  # Lazy import to avoid hard dependency for callers
+
         np_module = np
     except Exception:  # pragma: no cover - optional dependency missing
         np_module = None

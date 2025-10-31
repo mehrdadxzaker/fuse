@@ -41,9 +41,7 @@ class GradientBuilder:
         export_grads: Optional[Iterable[str]] = None,
     ) -> GradientProgram:
         gradient_lines: List[str] = []
-        contributions: OrderedDict[
-            str, OrderedDict[Tuple[str, ...], int]
-        ] = OrderedDict()
+        contributions: OrderedDict[str, OrderedDict[Tuple[str, ...], int]] = OrderedDict()
         exports: Set[str] = set(self.program.ir.exports)
         grad_exports: Set[str] = set()
 
@@ -187,18 +185,14 @@ class GradientBuilder:
                 lines = [
                     (
                         grad_arg,
-                        (
-                            f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})",
-                        ),
+                        (f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})",),
                     )
                 ]
             else:
                 lines = [
                     (
                         grad_arg,
-                        (
-                            f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs})",
-                        ),
+                        (f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs})",),
                     )
                 ]
             return lines

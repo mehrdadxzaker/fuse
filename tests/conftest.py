@@ -15,4 +15,3 @@ def pytest_sessionstart(session):  # noqa: D401 - test harness helper
     path = os.environ.get("PATH", "")
     if bin_dir and bin_dir not in path.split(os.pathsep):
         os.environ["PATH"] = os.pathsep.join([bin_dir, path]) if path else bin_dir
-

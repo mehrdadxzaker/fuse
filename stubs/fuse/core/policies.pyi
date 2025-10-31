@@ -52,7 +52,15 @@ class QuantizedSpec:
     dtype: str = ...
     group_size: int | None = ...
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any], *, base_path: Path | None, mmap: bool, mmap_threshold: int | None, strict: bool) -> QuantizedSpec: ...
+    def from_mapping(
+        cls,
+        mapping: Mapping[str, Any],
+        *,
+        base_path: Path | None,
+        mmap: bool,
+        mmap_threshold: int | None,
+        strict: bool,
+    ) -> QuantizedSpec: ...
     def is_active(self) -> bool: ...
     def __post_init__(self) -> None: ...
     def dequantize_numpy(self, values: NDArray[Any]) -> NDArray[Any]: ...
@@ -77,7 +85,15 @@ class LoRASpec:
     adapters: dict[str, LoRAAdapter]
     default: str | None
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any], *, base_path: Path | None, mmap: bool, mmap_threshold: int | None, strict: bool) -> LoRASpec: ...
+    def from_mapping(
+        cls,
+        mapping: Mapping[str, Any],
+        *,
+        base_path: Path | None,
+        mmap: bool,
+        mmap_threshold: int | None,
+        strict: bool,
+    ) -> LoRASpec: ...
 
 @dataclass
 class ResolvedLoRA:
@@ -93,7 +109,9 @@ class PrefetchSpec:
     neighbors: tuple[str, ...] = ...
     order: int = ...
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any] | None, default_order: int) -> PrefetchSpec: ...
+    def from_mapping(
+        cls, mapping: Mapping[str, Any] | None, default_order: int
+    ) -> PrefetchSpec: ...
 
 @dataclass
 class WeightShard:
@@ -118,7 +136,16 @@ class WeightManifestEntry:
     placement: str | None
     metadata: dict[str, Any]
     @classmethod
-    def from_mapping(cls, mapping: Mapping[str, Any], *, base_path: Path | None, mmap: bool, mmap_threshold: int | None, strict: bool, default_order: int) -> WeightManifestEntry: ...
+    def from_mapping(
+        cls,
+        mapping: Mapping[str, Any],
+        *,
+        base_path: Path | None,
+        mmap: bool,
+        mmap_threshold: int | None,
+        strict: bool,
+        default_order: int,
+    ) -> WeightManifestEntry: ...
 
 @dataclass
 class ResolvedWeight:
@@ -139,7 +166,16 @@ class ManifestWeightStore(WeightStore):
     mmap_mode: Incomplete
     mmap_threshold: Incomplete
     strict_mode: Incomplete
-    def __init__(self, manifest: str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]], *, base_path: str | Path | None = None, cache_bytes: int = ..., mmap_mode: bool = True, mmap_threshold_bytes: int | None = ..., strict: bool = False) -> None: ...
+    def __init__(
+        self,
+        manifest: str | Path | Mapping[str, Any] | Sequence[Mapping[str, Any]],
+        *,
+        base_path: str | Path | None = None,
+        cache_bytes: int = ...,
+        mmap_mode: bool = True,
+        mmap_threshold_bytes: int | None = ...,
+        strict: bool = False,
+    ) -> None: ...
     def resolve(self, name: str) -> ResolvedWeight: ...
     def available_adapters(self, slot: str) -> Sequence[str]: ...
     def activate_adapter(self, slot: str, adapter: str | None) -> None: ...
@@ -154,6 +190,8 @@ class RuntimePolicies:
     lora: LoRAPolicy | None = ...
     output_root: Path | None = ...
     def apply(self, name: str, value: NDArray[Any]) -> NDArray[Any]: ...
-    def materialize_weight(self, name: str, payload: Any, *, backend: str, device: Any | None = None) -> Any: ...
+    def materialize_weight(
+        self, name: str, payload: Any, *, backend: str, device: Any | None = None
+    ) -> Any: ...
     def fingerprint(self) -> dict[str, Any]: ...
     def resolve_output_path(self, path: str | Path) -> Path: ...
