@@ -148,15 +148,23 @@ if torch is not None:  # pragma: no cover - defined only when torch is available
             super().__init__()
             self.runner = runner
             self.input_names = list(input_names)
+            dtype = getattr(runner, "default_dtype", torch.float32)
+            device = getattr(runner, "device", torch.device("cpu"))
+            self.register_buffer(
+                "_devbuf",
+                torch.zeros((), dtype=dtype, device=device),
+                persistent=False,
+            )
 
         def forward(self, *args):
             tensor_inputs: Dict[str, Any] = {}
+            dev = self._devbuf.device
+            dt = self._devbuf.dtype
             for name, value in zip(self.input_names, args):
                 if not isinstance(value, torch.Tensor):
-                    value = torch.as_tensor(value, device=self.runner.device)
-                else:
-                    if value.device != self.runner.device:
-                        value = value.to(self.runner.device)
+                    value = torch.as_tensor(value, device=dev, dtype=dt)
+                elif value.device != dev or value.dtype != dt:
+                    value = value.to(device=dev, dtype=dt, copy=False)
                 tensor_inputs[name] = value
             cfg = replace(self.runner.config, mode="single")
             outputs = self.runner.run(inputs=tensor_inputs, config=cfg, skip_sinks=True)
