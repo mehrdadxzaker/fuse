@@ -1804,7 +1804,14 @@ class RuntimePolicies:
             raise BackendError("Output path is required for sink operations")
         raw = Path(path)
         if raw.is_absolute():
-            raise BackendError(f"Output path '{raw}' must be relative to the sandbox root")
+            resolved_raw = raw.expanduser().resolve()
+            if self.output_root is None:
+                resolved_raw.parent.mkdir(parents=True, exist_ok=True)
+                return resolved_raw
+            try:
+                raw = resolved_raw.relative_to(resolved_raw.anchor)
+            except ValueError as exc:
+                raise BackendError(f"Output path '{raw}' is not local to filesystem root") from exc
         root = Path(self.output_root) if self.output_root is not None else Path.cwd()
         root = root.expanduser().resolve()
         if root.exists() and not root.is_dir():

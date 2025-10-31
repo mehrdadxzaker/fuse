@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
@@ -40,6 +41,9 @@ class GradientBuilder:
         export_grads: Optional[Iterable[str]] = None,
     ) -> GradientProgram:
         gradient_lines: List[str] = []
+        contributions: OrderedDict[
+            str, OrderedDict[Tuple[str, ...], int]
+        ] = OrderedDict()
         exports: Set[str] = set(self.program.ir.exports)
         grad_exports: Set[str] = set()
 
@@ -55,11 +59,26 @@ class GradientBuilder:
             if eq.is_source or eq.is_sink or eq.rhs is None:
                 continue
             contribs = self._gradient_for_equation(eq)
-            gradient_lines.extend(contribs)
-            for line in contribs:
-                target = line.split("=", 1)[0].strip()
+            for target, expr_terms in contribs:
                 grad_name = target.split("[", 1)[0]
                 grad_exports.add(grad_name)
+                expr_map = contributions.setdefault(target, OrderedDict())
+                if expr_terms in expr_map:
+                    expr_map[expr_terms] += 1
+                else:
+                    expr_map[expr_terms] = 1
+
+        for target, expr_map in contributions.items():
+            if not expr_map:
+                continue
+            expr_parts: List[str] = []
+            for expr_terms, count in expr_map.items():
+                expr = " ".join(expr_terms)
+                if count > 1:
+                    expr_parts.append(f"{count} {expr}")
+                else:
+                    expr_parts.append(expr)
+            gradient_lines.append(f"{target} = {' + '.join(expr_parts)}")
 
         if export_grads is not None:
             grad_exports = {self._grad_name(name) for name in export_grads}
@@ -120,15 +139,15 @@ class GradientBuilder:
         grad_ref = TensorRef(name=self._grad_name(ref.name), indices=list(ref.indices))
         return self._format_tensor_ref(grad_ref)
 
-    def _gradient_for_equation(self, eq: Equation) -> List[str]:
+    def _gradient_for_equation(self, eq: Equation) -> List[Tuple[str, Tuple[str, ...]]]:
         rhs = eq.rhs
-        lines: List[str] = []
+        lines: List[Tuple[str, Tuple[str, ...]]] = []
         if isinstance(rhs, Term):
             lines.extend(self._grad_for_term(eq.lhs, rhs))
         elif isinstance(rhs, TensorRef):
             grad_lhs = self._format_grad_ref(eq.lhs)
             grad_rhs = self._format_grad_ref(rhs)
-            lines.append(f"{grad_rhs} = {grad_lhs}")
+            lines.append((grad_rhs, (grad_lhs,)))
         elif isinstance(rhs, FuncCall):
             lines.extend(self._grad_for_func(eq.lhs, rhs))
         elif isinstance(rhs, (int, float)):
@@ -138,28 +157,27 @@ class GradientBuilder:
             raise ValueError(f"Unsupported RHS type for gradient: {type(rhs).__name__}")
         return lines
 
-    def _grad_for_term(self, lhs: TensorRef, term: Term) -> List[str]:
+    def _grad_for_term(self, lhs: TensorRef, term: Term) -> List[Tuple[str, Tuple[str, ...]]]:
         grad_lhs = self._format_grad_ref(lhs)
-        lines: List[str] = []
+        lines: List[Tuple[str, Tuple[str, ...]]] = []
         factor_exprs = [self._expr_to_string(factor) for factor in term.factors]
         for idx, factor in enumerate(term.factors):
             if not isinstance(factor, TensorRef):
                 continue
             other_terms = [factor_exprs[j] for j in range(len(factor_exprs)) if j != idx]
-            expr_terms = [grad_lhs] + other_terms
+            expr_terms = tuple([grad_lhs] + other_terms)
             target = self._format_grad_ref(factor)
-            lines.append(f"{target} = {' '.join(expr_terms)}")
+            lines.append((target, expr_terms))
         return lines
 
-    def _grad_for_func(self, lhs: TensorRef, fn: FuncCall) -> List[str]:
+    def _grad_for_func(self, lhs: TensorRef, fn: FuncCall) -> List[Tuple[str, Tuple[str, ...]]]:
         name = fn.name.lower()
         grad_lhs = self._format_grad_ref(lhs)
         if name == "gelu":
             arg = self._ensure_tensor_arg(fn)
             grad_arg = self._format_grad_ref(arg)
             arg_expr = self._format_tensor_ref(arg)
-            lines = [f"{grad_arg} = {grad_lhs} gelu_grad({arg_expr})"]
-            return lines
+            return [(grad_arg, (grad_lhs, f"gelu_grad({arg_expr})"))]
         if name == "softmax":
             arg = self._ensure_tensor_arg(fn)
             grad_arg = self._format_grad_ref(arg)
@@ -167,10 +185,22 @@ class GradientBuilder:
             axis_expr = self._axis_kwarg(fn, default=-1)
             if axis_expr:
                 lines = [
-                    f"{grad_arg} = softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})"
+                    (
+                        grad_arg,
+                        (
+                            f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs}, {axis_expr})",
+                        ),
+                    )
                 ]
             else:
-                lines = [f"{grad_arg} = softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs})"]
+                lines = [
+                    (
+                        grad_arg,
+                        (
+                            f"softmax_grad({self._format_tensor_ref(lhs)}, {grad_lhs})",
+                        ),
+                    )
+                ]
             return lines
         if name == "const":
             return []
