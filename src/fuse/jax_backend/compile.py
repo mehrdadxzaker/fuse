@@ -147,11 +147,15 @@ def _resolve_precision_dtype(precision: str, device) -> Any:
 
 
 def _jax_gelu_grad(x):
+    x64 = jnp.asarray(x, dtype=jnp.float64)
     c = jnp.sqrt(2.0 / jnp.pi)
-    inner = c * (x + 0.044715 * jnp.power(x, 3))
+    inner = c * (x64 + 0.044715 * jnp.power(x64, 3))
     tanh_inner = jnp.tanh(inner)
     sech2 = 1.0 - jnp.power(tanh_inner, 2)
-    return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * jnp.power(x, 2)))
+    grad64 = 0.5 * (1.0 + tanh_inner) + 0.5 * x64 * sech2 * (
+        c * (1.0 + 0.134145 * jnp.power(x64, 2))
+    )
+    return grad64.astype(jnp.asarray(x).dtype)
 
 
 def _jax_softmax_grad(y, grad, axis: int):
@@ -512,10 +516,8 @@ class JaxRunner:
             arr = jnp.asarray(material, dtype=self.default_dtype)
         arr_device = None
         if self.device is not None:
-            try:
-                arr_device = arr.device()
-            except AttributeError:
-                arr_device = None
+            dev_attr = getattr(arr, "device", None)
+            arr_device = dev_attr() if callable(dev_attr) else dev_attr
             device_platform = getattr(self.device, "platform", None)
             if arr_device != self.device:
                 if (

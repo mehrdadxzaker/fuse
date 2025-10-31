@@ -184,12 +184,16 @@ def gelu(x):
 
 
 def gelu_grad(x):
+    arr = np.asarray(x)
+    x64 = arr.astype(np.float64, copy=False)
     c = np.sqrt(2.0 / np.pi)
-    x3 = np.power(x, 3)
-    inner = c * (x + 0.044715 * x3)
+    inner = c * (x64 + 0.044715 * np.power(x64, 3))
     tanh_inner = np.tanh(inner)
     sech2 = 1.0 - np.power(tanh_inner, 2)
-    return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * np.power(x, 2)))
+    grad64 = 0.5 * (1.0 + tanh_inner) + 0.5 * x64 * sech2 * (
+        c * (1.0 + 0.134145 * np.power(x64, 2))
+    )
+    return grad64.astype(arr.dtype, copy=False)
 
 
 def softmax(x, axis=-1):
