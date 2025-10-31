@@ -162,6 +162,16 @@ def _torch_sig(x: torch.Tensor, T: Optional[Any], zero_tol: float = 1e-9) -> tor
     return torch.sigmoid(x / temp)
 
 
+SQRT1_2 = 1.0 / math.sqrt(2.0)
+INV_SQRT_2PI = 1.0 / math.sqrt(2.0 * math.pi)
+
+
+def _torch_gelu(x: torch.Tensor) -> torch.Tensor:
+    x64 = x.to(dtype=torch.float64)
+    y64 = 0.5 * x64 * (1.0 + torch.erf(x64 * SQRT1_2))
+    return y64.to(dtype=x.dtype)
+
+
 def _coerce_scalar(value: Any) -> float:
     if isinstance(value, (int, float, np.integer, np.floating)):
         return float(value)
@@ -562,14 +572,11 @@ def _torch_const(
 
 
 def _torch_gelu_grad(x: torch.Tensor) -> torch.Tensor:
-    orig_dtype = x.dtype
     x64 = x.to(dtype=torch.float64)
-    c = math.sqrt(2.0 / math.pi)
-    inner = c * (x64 + 0.044715 * torch.pow(x64, 3))
-    tanh_inner = torch.tanh(inner)
-    sech2 = 1.0 - torch.pow(tanh_inner, 2)
-    grad64 = 0.5 * (1.0 + tanh_inner) + 0.5 * x64 * sech2 * (c * (1.0 + 0.134145 * torch.pow(x64, 2)))
-    return grad64.to(dtype=orig_dtype)
+    cdf64 = 0.5 * (1.0 + torch.erf(x64 * SQRT1_2))
+    pdf64 = torch.exp(-0.5 * x64 * x64) * INV_SQRT_2PI
+    grad64 = cdf64 + x64 * pdf64
+    return grad64.to(dtype=x.dtype)
 
 
 def _torch_softmax_grad(y: torch.Tensor, grad: torch.Tensor, axis: int) -> torch.Tensor:
@@ -1385,7 +1392,7 @@ class TorchRunner:
             self._sig_temperatures.append(temperature)
             return _torch_sig(base, temperature)
         if name == "gelu":
-            return F.gelu(eval_arg(args_expr[0]))
+            return _torch_gelu(eval_arg(args_expr[0]))
         if name == "gelu_grad":
             return _torch_gelu_grad(eval_arg(args_expr[0]))
         if name == "lnorm":

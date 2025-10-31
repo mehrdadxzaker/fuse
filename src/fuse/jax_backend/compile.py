@@ -72,7 +72,8 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, np.ndarray):
         return value.tolist()
     if jnp is not None and isinstance(value, jnp.ndarray):
-        return np.asarray(value).tolist()
+        material = jax.device_get(value) if jax is not None else value
+        return material.tolist()
     if isinstance(value, dict):
         return {str(k): _json_ready(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -217,7 +218,13 @@ def _jax_attention(query, key, value, mask=None, scale=None, causal=False):
 def _coerce_scalar(value) -> float:
     if isinstance(value, (int, float, np.integer, np.floating)):
         return float(value)
-    arr = np.asarray(value)
+    if hasattr(value, "shape") and getattr(value, "shape") == () and hasattr(value, "reshape"):
+        reshaped = value.reshape(())
+        try:
+            return float(reshaped)
+        except TypeError:
+            pass
+    arr = jnp.asarray(value) if jnp is not None else np.asarray(value)
     if arr.size != 1:
         raise ValueError("Expected scalar value for threshold")
     return float(arr.reshape(()))
@@ -228,7 +235,7 @@ def _coerce_rank_spec(rank):
         return None
     if isinstance(rank, (int, float, np.integer, np.floating)):
         return int(rank)
-    arr = np.asarray(rank)
+    arr = jnp.asarray(rank) if jnp is not None else np.asarray(rank)
     if arr.size == 1:
         return int(arr.reshape(()))
     return [int(v) for v in arr.reshape(-1).tolist()]
@@ -561,7 +568,7 @@ class JaxRunner:
                     "source": {
                         "name": name,
                         "path": eq.src_file,
-                        "shape": tuple(np.array(arr).shape),
+                        "shape": tuple(int(dim) for dim in getattr(arr, "shape", ())),
                         "mode": mode,
                     },
                 }
@@ -577,7 +584,8 @@ class JaxRunner:
                 mode = f"topk(k={k})"
             else:
                 out = val
-            array = np.array(out)
+            material = jax.device_get(out) if jax is not None else out
+            array = np.array(material)
             if eq.sink_file is None:
                 raise ValueError("Sink equation missing target file path")
             target_path = self.policies.resolve_output_path(eq.sink_file)
@@ -879,9 +887,16 @@ class JaxRunner:
             shapes: List[Tuple[int, ...]] = []
             sizes: List[int] = []
             for arr in arrays:
-                arr_np = np.asarray(arr)
-                shapes.append(tuple(int(dim) for dim in arr_np.shape))
-                sizes.append(int(np.dtype(arr_np.dtype).itemsize))
+                arr_shape = getattr(arr, "shape", ())
+                shapes.append(tuple(int(dim) for dim in arr_shape))
+                dtype = getattr(arr, "dtype", None)
+                if dtype is None:
+                    probe = jnp.asarray(arr) if jnp is not None else np.asarray(arr)
+                    dtype = probe.dtype
+                itemsize = getattr(dtype, "itemsize", None)
+                if itemsize is None:
+                    itemsize = int(np.dtype(dtype).itemsize)
+                sizes.append(int(itemsize))
             return shapes, sizes
 
         if projection != "sum" and projected:
@@ -1274,10 +1289,16 @@ class JaxRunner:
 
     # Utilities --------------------------------------------------------------
     def _update_index_domains(self, ref: TensorRef, arr):
-        arr_np = np.array(arr)
+        try:
+            shape = tuple(getattr(arr, "shape", ()))
+        except Exception:
+            shape = ()
+        if not shape:
+            material = jnp.asarray(arr) if jnp is not None else np.asarray(arr)
+            shape = tuple(int(dim) for dim in material.shape)
         for i, idx in enumerate(ref.indices):
-            if i < arr_np.ndim:
-                self.index_domains[idx] = max(self.index_domains.get(idx, 0), arr_np.shape[i])
+            if i < len(shape):
+                self.index_domains[idx] = max(self.index_domains.get(idx, 0), int(shape[i]))
 
     def _materialize_weight(self, name: str, payload: Any) -> jnp.ndarray:
         arr = self.policies.materialize_weight(
@@ -1354,14 +1375,19 @@ def _shift_axis_jnp(array: jnp.ndarray, axis: int, offset: int) -> jnp.ndarray:
 
 def _jax_topk(array: jnp.ndarray, k: int):
     values, indices = jax.lax.top_k(array, k)
-    values = np.array(values)
-    indices = np.array(indices)
-    if values.ndim == 1:
-        return [(int(indices[i]), float(values[i])) for i in range(values.shape[0])]
+    values_host = jax.device_get(values) if jax is not None else np.array(values)
+    indices_host = jax.device_get(indices) if jax is not None else np.array(indices)
+    values_arr = np.asarray(values_host)
+    indices_arr = np.asarray(indices_host)
+    if values_arr.ndim == 1:
+        return [
+            (int(indices_arr[i]), float(values_arr[i]))
+            for i in range(values_arr.shape[0])
+        ]
     results = []
-    for row_idx in range(values.shape[0]):
+    for row_idx in range(values_arr.shape[0]):
         row = []
-        for col in range(values.shape[1]):
-            row.append((int(indices[row_idx, col]), float(values[row_idx, col])))
+        for col in range(values_arr.shape[1]):
+            row.append((int(indices_arr[row_idx, col]), float(values_arr[row_idx, col])))
         results.append(row)
     return results
