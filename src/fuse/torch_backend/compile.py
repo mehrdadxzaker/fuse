@@ -562,11 +562,14 @@ def _torch_const(
 
 
 def _torch_gelu_grad(x: torch.Tensor) -> torch.Tensor:
+    orig_dtype = x.dtype
+    x64 = x.to(dtype=torch.float64)
     c = math.sqrt(2.0 / math.pi)
-    inner = c * (x + 0.044715 * torch.pow(x, 3))
+    inner = c * (x64 + 0.044715 * torch.pow(x64, 3))
     tanh_inner = torch.tanh(inner)
     sech2 = 1.0 - torch.pow(tanh_inner, 2)
-    return 0.5 * (1.0 + tanh_inner) + 0.5 * x * sech2 * (c * (1.0 + 0.134145 * torch.pow(x, 2)))
+    grad64 = 0.5 * (1.0 + tanh_inner) + 0.5 * x64 * sech2 * (c * (1.0 + 0.134145 * torch.pow(x64, 2)))
+    return grad64.to(dtype=orig_dtype)
 
 
 def _torch_softmax_grad(y: torch.Tensor, grad: torch.Tensor, axis: int) -> torch.Tensor:
@@ -891,7 +894,8 @@ class TorchRunner:
         if 'FxProxy' in globals() and FxProxy is not None and isinstance(tensor, FxProxy):  # type: ignore[name-defined]
             tensor = tensor.to(device=self.device, dtype=self.default_dtype)
         else:
-            tensor = tensor.to(self.device)
+            if tensor.device != self.device:
+                tensor = tensor.to(self.device)
             if tensor.dtype != self.default_dtype:
                 tensor = tensor.to(dtype=self.default_dtype)
         if not self._is_boolean_tensor(name):
@@ -1142,7 +1146,7 @@ class TorchRunner:
             dtype = self._resolve_term_dtype([])
             return self._eval_index_function(expr, axis_lengths, dtype)
         if isinstance(expr, torch.Tensor):
-            return expr.to(self.device)
+            return self._as_tensor(expr)
         if isinstance(expr, (np.ndarray, list, tuple, int, float, bool)):
             return self._as_tensor(expr)
         if isinstance(expr, str):
@@ -1154,8 +1158,12 @@ class TorchRunner:
     def _apply_index_specs(self, tensor: torch.Tensor, ref: TensorRef) -> torch.Tensor:
         specs = getattr(ref, "index_specs", None)
         if not specs:
-            return tensor.to(self.device)
-        result = tensor.to(self.device)
+            if tensor.device != self.device:
+                return tensor.to(self.device)
+            return tensor
+        result = tensor
+        if result.device != self.device:
+            result = result.to(self.device)
         if result.dim() == 0:
             return result
         static_specs = [spec for spec in specs if spec.axis not in ref.rolling]
@@ -1405,13 +1413,13 @@ class TorchRunner:
                 mask_value = self._eval(mask_expr, lhs=lhs)
                 fill_expr = fn.kwargs.get("fill")
                 fill_value = self._eval(fill_expr, lhs=lhs) if fill_expr is not None else None
-                return _torch_masked_softmax(
-                    self._as_tensor(eval_arg(args_expr[0])),
-                    self._as_tensor(mask_value) if mask_value is not None else None,
-                    dim=axis,
-                    fill_value=fill_value,
-                )
-            return F.softmax(self._as_tensor(eval_arg(args_expr[0])), dim=axis)
+                logits = self._as_tensor(eval_arg(args_expr[0]))
+                logits = logits.to(dtype=self.default_dtype)
+                mask_tensor = self._as_tensor(mask_value) if mask_value is not None else None
+                return _torch_masked_softmax(logits, mask_tensor, dim=axis, fill_value=fill_value)
+            logits = self._as_tensor(eval_arg(args_expr[0]))
+            logits = logits.to(dtype=self.default_dtype)
+            return F.softmax(logits, dim=axis)
         if name == "masked_softmax":
             if not args_expr:
                 raise ValueError("masked_softmax requires logits argument")
@@ -1672,7 +1680,9 @@ class TorchRunner:
 
     def _as_tensor(self, value: Any) -> torch.Tensor:
         if isinstance(value, torch.Tensor):
-            tensor = value.to(device=self.device)
+            tensor = value
+            if tensor.device != self.device:
+                tensor = tensor.to(device=self.device)
             if tensor.dtype != self.default_dtype:
                 tensor = tensor.to(dtype=self.default_dtype)
             return tensor
@@ -1791,6 +1801,12 @@ class TorchRunner:
                 pass
 
         module = self._build_fx(input_feed=input_feed)
+        metadata = {
+            "device": str(self.device),
+            "exports": list(self.ir.exports),
+            "cache_fingerprint": fingerprint,
+            "input_signature": input_signature,
+        }
         if module is not None:
             buffer = io.BytesIO()
             torch.save(module, buffer)
@@ -1798,12 +1814,10 @@ class TorchRunner:
                 "torch",
                 cache_key,
                 buffer.getvalue(),
-                metadata={
-                    "device": str(self.device),
-                    "exports": list(self.ir.exports),
-                    "cache_fingerprint": fingerprint,
-                },
+                metadata=metadata,
             )
+        else:
+            self.cache_manager.write_metadata("torch", cache_key, metadata)
         return module
 
     def _build_fx(self, *, input_feed: Optional[Dict[str, Any]] = None) -> Optional[GraphModule]:
@@ -1831,8 +1845,17 @@ if torch is not None:
 
         @torch.no_grad()
         def forward(self) -> Tuple[torch.Tensor, ...]:
-            cfg = replace(self.runner.config, mode="single")
-            outputs = self.runner.run(inputs=self.input_feed, config=cfg, skip_sinks=True)
+            prev_cfg = self.runner.config
+            cfg = replace(prev_cfg, mode="single")
+            prev_zero_copy = self.runner.zero_copy
+            prev_temps = self.runner._temperature_schedules
+            try:
+                outputs = self.runner.run(inputs=self.input_feed, config=cfg, skip_sinks=True)
+            finally:
+                self.runner.config = prev_cfg
+                self.runner.zero_copy = prev_zero_copy
+                self.runner.default_dtype = _resolve_precision_dtype(prev_cfg.precision, self.runner.device)
+                self.runner._temperature_schedules = prev_temps
             return tuple(outputs[name] for name in self.runner.ir.exports)
 
 else:
