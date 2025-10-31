@@ -27,4 +27,7 @@ python -m fuse run PROGRAM [--backend numpy|torch|jax] [--out PATH] [--cache PAT
 !!! info "Backend availability"
     Torch and JAX backends are optional. If the frameworks are not installed, Fuse falls back to NumPy automatically.
 
+!!! note "Python API default"
+    When using the Python API, `Program.compile()` now defaults to `backend="auto"`, which picks a backend based on hardware and workload (e.g., attention/MLP on CUDA/MPS tends to select Torch; streaming, demand mode, or Monte Carlo projection select NumPy). The CLI keeps an explicit `--backend` flag with a default of `numpy`.
+
 This utility is intended for CI smoke tests and ad-hoc experimentation; for integrated applications prefer the Python API.

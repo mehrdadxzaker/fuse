@@ -16,8 +16,9 @@ These recipes cover day-to-day tasks: compiling programs, exporting artifacts, c
     source = Path("examples/04_mlp.fuse").read_text()
     program = Program(source)
 
-    numpy_runner = program.compile(backend="numpy")
-    numpy_runner()
+    # Default is backend="auto"; pass backend explicitly to force an engine.
+    auto_runner = program.compile()  # chooses based on hardware/workload
+    auto_runner()
     ```
 
 === "Torch FX"
@@ -41,6 +42,17 @@ These recipes cover day-to-day tasks: compiling programs, exporting artifacts, c
 
 !!! tip
     Switching between backends is a compile-time choice. The DSL stays identical across engines, so you can validate behaviour under NumPy before deploying with Torch or JAX.
+
+## Auto backend selection
+
+`Program.compile()` now defaults to `backend="auto"`. The chooser considers the execution mode, projection strategy, streaming usage, and hardware to pick an engine:
+
+- NumPy for demand mode, Monte Carlo projection, or streaming workloads.
+- Torch on CUDA/MPS for deep-learning–like programs (e.g., attention/MLP) when available.
+- JAX for heavier batched workloads when JAX is installed and can amortize JIT.
+- Falls back to NumPy on small programs or when accelerators aren’t available.
+
+Force a specific backend with `program.compile(backend="numpy"|"torch"|"jax")`.
 
 ## Export to TorchScript / ONNX
 

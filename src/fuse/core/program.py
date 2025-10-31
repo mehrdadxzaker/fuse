@@ -27,7 +27,7 @@ class Program:
 
     def compile(
         self,
-        backend: str = "numpy",
+        backend: str = "auto",
         device: str = "auto",
         cache_dir: Optional[str] = None,
         config: Optional[ExecutionConfig] = None,
@@ -35,6 +35,19 @@ class Program:
         policies: Optional[RuntimePolicies] = None,
         **backend_kwargs,
     ):
+        """Compile the program to a runnable for the selected backend.
+
+        When ``backend`` is ``"auto"`` (default), choose a backend based on:
+        - Execution mode and projection strategy (NumPy for demand/Monte Carlo).
+        - Streaming usage (NumPy when streaming is present).
+        - Hardware availability and requested device.
+        - A light heuristic over the IR to detect DL-like workloads (einsum-heavy,
+          attention/MLP ops) where Torch/JAX are preferable.
+
+        The selection prefers Torch on CUDA/MPS for attention/MLP-style programs,
+        otherwise tries JAX when JIT cost can amortize. Small/streaming workloads
+        use NumPy to avoid dispatch/JIT overheads.
+        """
         cfg = config or ExecutionConfig()
         if execution is not None:
             cfg = replace(cfg, mode=execution)
@@ -45,6 +58,10 @@ class Program:
 
         policy_obj = policies or RuntimePolicies()
         cache_manager = CacheManager(cache_dir) if cache_dir else None
+
+        # Auto backend selection -------------------------------------------------
+        if backend == "auto":
+            backend = self._choose_backend_auto(cfg)
 
         if backend == "numpy":
             if cfg.device not in {"auto", "cpu"}:
@@ -172,3 +189,117 @@ class Program:
 
             return jax_compile
         raise BackendError(f"Unknown backend '{backend}'")
+
+    # Heuristics ---------------------------------------------------------------
+    def _choose_backend_auto(self, cfg: ExecutionConfig) -> str:
+        """Pick a backend based on IR, execution config, and hardware.
+
+        Rules of thumb:
+        - Demand mode and Monte Carlo projections use NumPy.
+        - Streaming programs use NumPy.
+        - Prefer Torch on CUDA/MPS for attention/MLP-like workloads.
+        - Otherwise try JAX if available for heavier, batched workloads.
+        - Fall back to NumPy for small programs and when no accel is present.
+        """
+        # Fast exits where Torch/JAX intentionally fall back to NumPy
+        if cfg.mode == "demand" or cfg.projection_strategy == "monte_carlo":
+            return "numpy"
+        if self.ir.has_streaming():
+            return "numpy"
+
+        # Inspect IR for workload hints
+        features = self._program_features()
+        equations = features.get("equations", 0)
+        einsum_terms = features.get("einsum_terms", 0)
+        has_attention = bool(features.get("has_attention", False))
+        op_count = features.get("op_count", 0)
+
+        # A simple workload score: einsums and attention weigh more
+        score = einsum_terms + op_count + (3 if has_attention else 0)
+        small_workload = (equations <= 3 and score <= 2)
+
+        target = (cfg.device or "auto").lower()
+
+        # Probe availability lazily
+        torch_available = False
+        torch_gpu_or_mps = False
+        try:  # pragma: no cover - import/availability depends on environment
+            import torch as _torch  # type: ignore
+
+            torch_available = _torch is not None
+            torch_gpu_or_mps = (
+                (_torch.cuda.is_available() if hasattr(_torch, "cuda") else False)
+                or (
+                    hasattr(_torch, "backends")
+                    and hasattr(_torch.backends, "mps")
+                    and bool(_torch.backends.mps.is_available())
+                )
+            )
+        except Exception:  # pragma: no cover - torch optional
+            torch_available = False
+            torch_gpu_or_mps = False
+
+        jax_available = False
+        jax_has_gpu = False
+        try:  # pragma: no cover - import/availability depends on environment
+            import jax as _jax  # type: ignore
+
+            jax_available = _jax is not None
+            # If jax is present, ask for gpu devices
+            try:
+                jax_has_gpu = bool(_jax.devices("gpu"))
+            except Exception:
+                jax_has_gpu = False
+        except Exception:  # pragma: no cover - jax optional
+            jax_available = False
+            jax_has_gpu = False
+
+        # GPU/MPS targets ------------------------------------------------------
+        wants_gpu_like = target.startswith("cuda") or target == "mps" or (target == "auto" and (torch_gpu_or_mps or jax_has_gpu))
+        if not small_workload and wants_gpu_like:
+            # Prefer Torch for attention/DL-like programs when available
+            if torch_available and (torch_gpu_or_mps or target.startswith("cuda") or target == "mps"):
+                return "torch"
+            if jax_available and (jax_has_gpu or target == "auto"):
+                return "jax"
+            # No accel but heavy: fall through to CPU choices below
+
+        # CPU targets or small workloads --------------------------------------
+        if small_workload:
+            return "numpy"
+
+        # Heavier CPU workloads: prefer Torch if available, else JAX.
+        if torch_available:
+            return "torch"
+        if jax_available:
+            return "jax"
+        return "numpy"
+
+    def _program_features(self) -> Dict[str, int]:
+        """Collect lightweight structural features from the IR for heuristics."""
+        equations = 0
+        einsum_terms = 0
+        op_count = 0
+        has_attention = 0
+
+        from .ir import FuncCall, Term  # local import to avoid cycles
+
+        for eq in self.ir.equations:
+            if eq.is_source or eq.is_sink:
+                continue
+            equations += 1
+            rhs = eq.rhs
+            if isinstance(rhs, Term):
+                if len(getattr(rhs, "factors", []) or []) >= 2:
+                    einsum_terms += 1
+            if isinstance(rhs, FuncCall):
+                op_count += 1
+                name = (rhs.name or "").lower()
+                if name in {"attention"}:
+                    has_attention = 1
+        return {
+            "equations": equations,
+            "einsum_terms": einsum_terms,
+            "op_count": op_count,
+            "has_attention": has_attention,
+        }

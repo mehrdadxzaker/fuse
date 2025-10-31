@@ -79,6 +79,12 @@ Artifacts (sources, IR, simple plans, outputs) are written into `runs/` under ea
   - **NumPy** runner with fixpoint forward/backward chaining, recursion, enhanced `explain()` (einsum canonicalization, projected indices, timing).
   - **Torch FX** backend that emits a graph module backed by `torch.einsum`/NN ops (access via `runner.fx_module`), honouring caching and policies.
   - **JAX** backend that evaluates with `jax.numpy` and exposes a lazily-built `runner.xla_callable` for `jax.jit` export.
+- Backend selection
+  - The Python API defaults to `backend="auto"` in `Program.compile()`. The chooser is hardware‑ and workload‑aware:
+    - Picks NumPy for demand mode, Monte Carlo projection, or streaming programs.
+    - Prefers Torch on CUDA/MPS for attention/MLP‑style workloads when available.
+    - Otherwise considers JAX for heavier batched workloads when JAX is installed.
+    - Falls back to NumPy for small programs or when accelerators aren’t available.
 - Execution controls via `ExecutionConfig`
   - `precision` defaults to `fp32`. Mixed-precision runs can request `bf16`, `fp16`, or `auto` (which selects the fastest supported dtype per backend/device). NumPy always stays in `fp32`; Torch refuses `fp16` on CPU and checks CUDA/MPS support; JAX only permits `fp16` on GPU and maps TPU/GPU `auto` runs to `bf16`.
   - `device` chooses where execution happens: `auto`, `cpu`, `cuda[:index]`, or `mps`. NumPy can only target CPU; Torch/JAX resolve and pin all compilation artifacts to the requested accelerator so FX graphs and XLA lowers stay aligned.
