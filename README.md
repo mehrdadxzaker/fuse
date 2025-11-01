@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="Fuse logo" width="140" />
+  <img src="docs/assets/Fuse.png" alt="Fuse logo" width="160" />
 </p>
 
 # Fuse — a tensor‑equation DSL as a library

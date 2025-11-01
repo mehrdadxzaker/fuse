@@ -8,8 +8,8 @@ use_directory_urls: true
 theme:
   name: material
   language: en
-  logo: assets/logo.svg
-  favicon: assets/logo.svg
+  logo: assets/Fuse.png
+  favicon: assets/Fuse.png
   font:
     text: "Inter"
     code: "JetBrains Mono"
