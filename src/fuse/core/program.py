@@ -19,9 +19,20 @@ from .shape_checker import validate_program_shapes
 
 
 class Program:
-    def __init__(self, eqs: str):
+    def __init__(self, eqs: str, *, parser: str = "legacy"):
         self.src = eqs
-        self.ir: ProgramIR = parse(eqs)
+        if parser == "legacy":
+            self.ir: ProgramIR = parse(eqs)  # type: ignore[misc]
+        elif parser in {"v2", "expr"}:
+            from .parser_expr import parse_program as _parse_program_v2
+            from .macro_rewrite import expand_macros as _expand_macros
+            from .ast_lowering import lower_to_ir as _lower_to_ir
+
+            ast_prog = _parse_program_v2(eqs)
+            ast_prog = _expand_macros(ast_prog)
+            self.ir = _lower_to_ir(ast_prog)
+        else:
+            raise ValueError("Unknown parser mode; use 'legacy' or 'v2'")
         validate_program_shapes(self.ir)
         self.digest = compute_program_hash(self.src)
 
