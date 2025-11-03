@@ -1881,6 +1881,12 @@ class NumpyRunner:
             else:
                 axis = self._axis_from_spec(axis_spec, args_expr[0], lhs, default=-1)
             return concat(arrays, axis=axis)
+        if name == "pow":
+            if len(args_expr) < 2:
+                raise ValueError("pow requires base and exponent")
+            base = eval_arg(args_expr[0])
+            exp = eval_arg(args_expr[1])
+            return np.power(base, exp)
         if name in {"max", "amax"}:
             if not args_expr:
                 raise ValueError("max/amax requires an argument")

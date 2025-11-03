@@ -1,0 +1,107 @@
+%import common.CNAME -> IDENT
+%import common.SIGNED_NUMBER -> NUMBER
+%import common.ESCAPED_STRING -> STRING
+%import common.WS_INLINE
+%ignore WS_INLINE
+
+NEWLINE: /(\r?\n)+/
+COMMENT: /#[^\n]*/
+%ignore COMMENT
+
+// Top level -------------------------------------------------------------------
+
+DOUBLE_COLON: "::"
+
+program: _sep* (toplevel (_sep+ toplevel)*)? _sep*
+
+toplevel: import_stmt
+        | param
+        | axis
+        | const
+        | fn_def
+        | stmt
+
+_sep: NEWLINE | ";"
+
+// Declarations ----------------------------------------------------------------
+
+import_stmt: "import" STRING ("as" IDENT)?
+param:  "param" IDENT (":" IDENT)? ("=" expr)?
+axis:   "axis" IDENT ("=" expr)?
+const:  "const" IDENT "=" expr
+
+qual_ident: IDENT (DOUBLE_COLON IDENT)*
+
+fn_def: "fn" qual_ident "(" [ fn_params ] ")" ["->" lhs] block
+fn_params: fn_param ("," fn_param)*
+fn_param: lhs
+
+// Statements ------------------------------------------------------------------
+
+stmt: equation
+    | let_stmt
+    | block
+
+equation: lhs "=" expr
+        | lhs "when" expr "=" expr   -> equation_when
+lhs: IDENT dims?
+dims: "[" index_symbol ("," index_symbol)* "]"
+
+let_stmt: "let" lhs "=" expr
+
+block: "{" _sep* (stmt (_sep+ stmt)*)? _sep* "}"
+
+// Expressions -----------------------------------------------------------------
+
+?expr: ternary
+ternary: or_expr ("?" expr ":" expr)?
+
+or_expr: and_expr ("||" and_expr)*
+and_expr: add_expr ("&&" add_expr)*
+add_expr: mul_expr (("+"|"-") mul_expr)*
+mul_expr: unary   (("*"|"/") unary)*
+
+?unary: primary
+      | ("-"|"!") unary     -> unary
+
+?primary: NUMBER            -> number
+        | IDENT             -> ident
+        | tensor_ref
+        | macro_call
+        | call
+        | piecewise
+        | reduce_expr
+        | "(" expr ")"      -> group
+
+call: qual_ident "(" [ call_args ] ")"
+call_args: call_arg ("," call_arg)*
+call_arg: IDENT "=" expr   -> kwarg
+        | expr
+
+// Macros ---------------------------------------------------------------------
+
+macro_call: "@" IDENT "(" [ call_args ] ")"
+
+// Tensor references -----------------------------------------------------------
+
+INDEX_TOKEN: /[*A-Za-z_:][A-Za-z0-9_:'+\-:\.]*/
+
+tensor_ref: IDENT index_suffix?
+index_suffix: "[" index_list "]"
+index_list: [index_symbol ("," index_symbol)*]
+index_symbol: INDEX_TOKEN
+
+// Piecewise & reduce sugar ----------------------------------------------------
+
+piecewise: "case" "{" _sep* piece_entries [default_entry] _sep* "}"
+piece_entries: piece_entry (_sep+ piece_entry)*
+piece_entry: expr "->" expr
+default_entry: "default" "->" expr
+
+reduce_expr: "reduce" "(" IDENT "," reduce_axes ")" expr
+reduce_axes: IDENT ("," IDENT)*
+
+// Power precedence (right-assoc)
+// Insert between unary and mul
+pow_expr: unary ("**" pow_expr)?
+mul_expr: pow_expr (("*"|"/") pow_expr)*
