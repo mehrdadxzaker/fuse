@@ -83,6 +83,9 @@ class _Lowerer:
         self._evaluate_constants(prog)
         for stmt in prog.statements:
             self.lower_stmt(stmt)
+        # Exports: propagate from AST
+        if getattr(prog, "exports", None):
+            self.exports.extend([str(x) for x in prog.exports])
         return ProgramIR(equations=self.equations, exports=self.exports)
 
     def lower_stmt(self, stmt: Any) -> None:
@@ -307,8 +310,9 @@ class _Lowerer:
             self.equations.append(Equation(lhs=lhs, rhs=lowered, projection="sum"))
             return
         lowered = self._lower_expr(rhs)
-        # If lowered is a "case" func, we must materialize into additions by splitting branches.
-        # Otherwise, emit as a direct equation.
+        # Wrap non-Term rhs into a single-factor Term to ensure projection of extra axes
+        if not isinstance(lowered, Term):
+            lowered = Term(factors=[lowered])
         self.equations.append(Equation(lhs=lhs, rhs=lowered, projection="sum"))
 
     def _load_imports(self, prog: AstProgram) -> None:
