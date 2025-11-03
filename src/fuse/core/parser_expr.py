@@ -77,6 +77,8 @@ class _AstXform(Transformer):
                 prog.consts.append(item)
             elif isinstance(item, FnDef):
                 prog.fns.append(item)
+            elif isinstance(item, tuple) and item and item[0] == "__export__":
+                prog.exports.append(item[1])
             else:
                 prog.statements.append(item)
         return prog
@@ -90,6 +92,11 @@ class _AstXform(Transformer):
             alias_tok: Token = items[1]
             alias = alias_tok.value
         return Import(path=_ast.literal_eval(path_tok.value), alias=alias, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+
+    @v_args(meta=True)
+    def export_stmt(self, meta, items):
+        name_tok: Token = items[0]
+        return ("__export__", name_tok.value)
 
     @v_args(meta=True)
     def param(self, meta, items):

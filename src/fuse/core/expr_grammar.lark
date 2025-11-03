@@ -18,6 +18,7 @@ toplevel: import_stmt
         | param
         | axis
         | const
+        | export_stmt
         | fn_def
         | stmt
 
@@ -26,6 +27,7 @@ _sep: NEWLINE | ";"
 // Declarations ----------------------------------------------------------------
 
 import_stmt: "import" STRING ("as" IDENT)?
+export_stmt: "export" IDENT
 param:  "param" IDENT (":" IDENT)? ("=" expr)?
 axis:   "axis" IDENT ("=" expr)?
 const:  "const" IDENT "=" expr
