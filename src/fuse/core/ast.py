@@ -67,6 +67,7 @@ class Program(Node):
     consts: List[Const] = field(default_factory=list)
     fns: List[FnDef] = field(default_factory=list)
     statements: List[Node] = field(default_factory=list)  # Equation | Let | Block
+    exports: List[str] = field(default_factory=list)
 
 
 # Expressions -----------------------------------------------------------------
@@ -298,3 +299,5 @@ def pretty_print_old_style(prog: Program) -> str:
         lines.append("}")
 
     return "\n".join(lines)
+    for name in prog.exports:
+        lines.append(f"export {name};")
