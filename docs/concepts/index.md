@@ -55,3 +55,7 @@ The DSL is designed to resemble algebraic equations while supporting tensor-spec
 * Builtins cover activation functions, attention, concatenation, and reduction helpers.
 
 Consult the [DSL reference](../dsl_reference.md) for the full grammar and examples.
+
+## Migration to structured syntax (v2)
+
+The legacy parser remains the default to keep existing programs working. You can opt into a structured grammar that adds expressions and blocks by constructing `Program` with `parser='v2'`. See the [migration guide](migration.md) for an incremental, no‑rewrite path.

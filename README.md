@@ -106,7 +106,7 @@ Apache 2.0 – see `LICENSE`.
 
 ## Limitations
 
-- Parser is line‑oriented: no arithmetic, conditionals, or macro system yet.
+- Legacy parser remains the default for CLI; a structured parser with expressions/blocks/macros is available via `Program(..., parser='v2')` and lowers to the same IR.
 - Fixpoint mode is synchronous (no semi‑naïve delta joins) so large recursive programs may run slowly.
 - Torch/JAX currently embed sources as constants; dynamic data loaders need explicit inputs.
 - Policy hooks surface structure but don’t yet include distributed sharding or quant‑aware training loops.

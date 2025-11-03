@@ -2,9 +2,19 @@
 
 [[toc]]
 
-The Fuse front-end is a compact, line-oriented DSL for wiring tensor equations.
-This page collects the syntax in one place so you can skim the affordances
-without spelunking through parser code.
+The Fuse front-end is a compact DSL for wiring tensor equations. Two parsers
+are available:
+
+- Legacy line‑oriented grammar (default) — the original, minimal surface.
+- Structured grammar (v2, opt‑in) — adds expressions and blocks while keeping
+  the legacy syntax a strict subset.
+
+To opt into v2 in Python, construct `Program` with `parser='v2'`:
+
+```
+from fuse.core.program import Program
+prog = Program(src_text, parser='v2')
+```
 
 ## Lexical structure
 
@@ -17,7 +27,7 @@ without spelunking through parser code.
 * String literals use double quotes and are primarily employed for source/sink
   file paths.
 
-## Statements
+## Statements (legacy)
 
 ### Equations
 
@@ -138,3 +148,68 @@ of the DSL.
 
 Keep this reference handy while authoring `.fuse` programs or embedding
 equations inside Python helpers.
+
+---
+
+## Structured syntax (v2)
+
+The v2 grammar adds expressions, blocks, pure functions, and macros. It compiles
+down to the same IR, and the original line syntax remains valid.
+
+Highlights:
+
+- Let bindings and multi‑line blocks
+  - `let sim[u,v] = Emb[u,d] * Emb[v,d];`
+  - `{ let t = 1 + 2; A[i] = t * x[i]; }`
+
+- Arithmetic and broadcasting
+  - Elementwise `+ - * / **` with axis‑aware broadcasting.
+  - Reductions via `reduce(op, axes) expr`, e.g. `reduce(sum, d) x[i,d]*x[i,d]`.
+
+- Guards and selects
+  - `score[u] = select(risky[u], hi[u], lo[u]);`
+  - Guard sugar: `score[u] when risky[u] = hi[u];`
+  - Piecewise: `case { risky[u] -> hi[u]; default -> lo[u]; }`
+
+- Pure functions (inlineable)
+  - `fn dot(a[x], b[x]) -> s[] { s[] = a[x] * b[x]; }`
+  - `sim[i,j] = dot(Emb[i,d], Emb[j,d]);`
+  - No side‑effects; recursion is forbidden initially.
+
+- Macros (deterministic, hygienic)
+  - `@softmax(x, axis=j)` → `softmax(x, axis=j)` or `masked_softmax(...)`.
+  - `@layer_norm(x, axis=d, eps=1e-5)` → `layernorm(...)`.
+
+### v2 grammar sketch (subset)
+
+```
+program     := (import | export | param | axis | const | fn | stmt)*
+stmt        := equation | let | block
+equation    := lhs '=' expr | lhs 'when' expr '=' expr
+lhs         := IDENT dims?
+dims        := '[' IDENT (',' IDENT)* ']'
+expr        := ternary
+ternary     := or_expr ('?' expr ':' expr)?
+or_expr     := and_expr ('||' and_expr)*
+and_expr    := add_expr ('&&' add_expr)*
+add_expr    := mul_expr (('+'|'-') mul_expr)*
+mul_expr    := pow_expr (('*'|'/') pow_expr)*
+pow_expr    := unary ('**' pow_expr)?
+unary       := primary | ('-'|'!') unary
+primary     := NUMBER | IDENT | tensor_ref | call | macro | piecewise | reduce | '(' expr ')'
+tensor_ref  := IDENT '[' index (',' index)* ']'
+call        := IDENT '(' args? ')'
+macro       := '@' IDENT '(' args? ')'
+args        := (IDENT '=' expr | expr) (',' (IDENT '=' expr | expr))*
+reduce      := 'reduce' '(' IDENT ',' axes ')' expr
+```
+
+### Migration (no rewrites)
+
+- All existing `.fuse` files keep working (legacy is the default parser).
+- You can start using `let` and arithmetic first—no semantic risk.
+- Add `select` and `case` where you currently simulate branching via multiple equations.
+- Introduce functions as inline sugar only; forbid recursion initially.
+- Macros expand to pure calls before type/shape checking to preserve determinism.
+
+See also: `Program(src, parser='v2')`.
