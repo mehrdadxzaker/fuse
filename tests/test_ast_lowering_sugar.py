@@ -8,10 +8,7 @@ def _find_eq(ir, name):
 
 
 def test_let_and_reduce_lowering():
-    src = (
-        'let sim[u,v] = Emb[u,d] * Emb[v,d];\n'
-        'score[u] = reduce(sum, v) sim[u,v] * w[v];\n'
-    )
+    src = "let sim[u,v] = Emb[u,d] * Emb[v,d];\nscore[u] = reduce(sum, v) sim[u,v] * w[v];\n"
     ast_prog = parse_program(src)
     ir = lower_to_ir(ast_prog)
 
@@ -34,10 +31,7 @@ def test_let_and_reduce_lowering():
 
 
 def test_when_guard_lowering():
-    src = (
-        'score[u] when risky[u] = score_hi[u];\n'
-        'score[u] when !risky[u] = score_lo[u];\n'
-    )
+    src = "score[u] when risky[u] = score_hi[u];\nscore[u] when !risky[u] = score_lo[u];\n"
     ast_prog = parse_program(src)
     ir = lower_to_ir(ast_prog)
     score_eqs = _find_eq(ir, "score")
@@ -56,10 +50,7 @@ def test_when_guard_lowering():
 
 
 def test_power_and_div_lowering():
-    src = (
-        'let z[i,d] = x[i,d] / (y[d] ** 0.5);\n'
-        'norm[i] = reduce(sum, d) (z[i,d] * z[i,d]);\n'
-    )
+    src = "let z[i,d] = x[i,d] / (y[d] ** 0.5);\nnorm[i] = reduce(sum, d) (z[i,d] * z[i,d]);\n"
     ast_prog = parse_program(src)
     ir = lower_to_ir(ast_prog)
     # First equation should produce a pow() in the term

@@ -5,12 +5,12 @@ from fuse.core.parser_expr import parse_program
 def test_parse_and_pretty_print_smoke():
     src = (
         'import "data.bin" as data;\n'
-        'param N: int = 128;\n'
-        'axis i;\n'
-        'const K = 3;\n'
-        'fn foo(x) { let y = x * 2; A[i] = y + 1; }\n'
-        'let t = 1 + 2 * 3;\n'
-        'A[i] = t ? foo(t) : 0;\n'
+        "param N: int = 128;\n"
+        "axis i;\n"
+        "const K = 3;\n"
+        "fn foo(x) { let y = x * 2; A[i] = y + 1; }\n"
+        "let t = 1 + 2 * 3;\n"
+        "A[i] = t ? foo(t) : 0;\n"
     )
 
     prog = parse_program(src)

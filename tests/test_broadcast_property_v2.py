@@ -35,4 +35,3 @@ def test_elementwise_broadcast_sum(draw_input):
     y = np.random.randn(*shape_head).astype(np.float32)
     out = runner.run(inputs={"x": x, "y": y})["z"]
     assert out.shape == shape_head
-

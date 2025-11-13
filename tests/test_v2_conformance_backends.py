@@ -5,11 +5,11 @@ from fuse.core.evaluator_numpy import ExecutionConfig
 from fuse.core.program import Program
 
 PROG_SRC = (
-    'param D:int = 16; axis i; axis j; axis d;\n'
-    'fn dot(a[d], b[d]) -> s[] { s[] = a[d] * b[d]; }\n'
-    'sim[i,j] = dot(Emb[i,d], Emb[j,d]);\n'
-    'score[i] = reduce(sum, j) select(mask[i], sim[i,j], 0);\n'
-    'export score;'
+    "param D:int = 16; axis i; axis j; axis d;\n"
+    "fn dot(a[d], b[d]) -> s[] { s[] = a[d] * b[d]; }\n"
+    "sim[i,j] = dot(Emb[i,d], Emb[j,d]);\n"
+    "score[i] = reduce(sum, j) select(mask[i], sim[i,j], 0);\n"
+    "export score;"
 )
 
 
@@ -47,4 +47,3 @@ def test_v2_conformance_select_piecewise_fn_inline(backend):
     if hasattr(actual, "__array__") and not isinstance(actual, np.ndarray):
         actual = np.asarray(actual)
     assert np.allclose(expected, actual, atol=1e-5, rtol=1e-5)
-

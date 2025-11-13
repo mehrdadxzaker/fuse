@@ -151,7 +151,9 @@ class Block(Node):
 @dataclass
 class Tensor(Node):
     name: str = ""
-    dims: List[str] = field(default_factory=list)  # raw index tokens, may include dotted/offset/slice
+    dims: List[str] = field(
+        default_factory=list
+    )  # raw index tokens, may include dotted/offset/slice
 
 
 # Pretty printer ---------------------------------------------------------------
@@ -213,8 +215,8 @@ def _pp_expr(expr: Expr, parent_op: Optional[str] = None, side: str = "") -> str
     except Exception:  # pragma: no cover - defensive import
         IRTensorRef = None  # type: ignore
     if IRTensorRef is not None and isinstance(expr, IRTensorRef):  # type: ignore
-        idxs = getattr(expr, 'indices', []) or []
-        dotted = set(getattr(expr, 'dotted_axes', []) or [])
+        idxs = getattr(expr, "indices", []) or []
+        dotted = set(getattr(expr, "dotted_axes", []) or [])
         raw = [f"{ax}." if ax in dotted else ax for ax in idxs]
         return f"{expr.name}[{', '.join(raw)}]" if raw else expr.name
     # Literals and bare identifiers are printed as-is
@@ -232,9 +234,9 @@ def pretty_print_old_style(prog: Program) -> str:
 
     for imp in prog.imports:
         if imp.alias:
-            lines.append(f"import \"{imp.path}\" as {imp.alias};")
+            lines.append(f'import "{imp.path}" as {imp.alias};')
         else:
-            lines.append(f"import \"{imp.path}\";")
+            lines.append(f'import "{imp.path}";')
 
     for p in prog.params:
         type_part = f": {p.type_name}" if p.type_name else ""
@@ -278,6 +280,7 @@ def pretty_print_old_style(prog: Program) -> str:
             lines.append("}")
 
     for fn in prog.fns:
+
         def _pp_lhs(lhs: Lhs) -> str:
             return f"{lhs.name}[{', '.join(lhs.dims)}]" if lhs.dims else lhs.name
 

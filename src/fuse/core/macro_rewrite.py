@@ -37,7 +37,11 @@ class MacroExpander:
         if isinstance(st, Let):
             return replace(st, value=self._expand_expr(st.value))
         if isinstance(st, Equation):
-            return replace(st, rhs=self._expand_expr(st.rhs), guard=self._expand_expr(st.guard) if st.guard is not None else None)
+            return replace(
+                st,
+                rhs=self._expand_expr(st.rhs),
+                guard=self._expand_expr(st.guard) if st.guard is not None else None,
+            )
         if isinstance(st, Block):
             return replace(st, statements=[self._expand_stmt(x) for x in st.statements])
         return st
@@ -59,7 +63,9 @@ class MacroExpander:
         except Exception:
             BinOp = UnaryOp = Select = Piecewise = Reduce = tuple()  # type: ignore
         if isinstance(expr, BinOp):
-            return replace(expr, left=self._expand_expr(expr.left), right=self._expand_expr(expr.right))
+            return replace(
+                expr, left=self._expand_expr(expr.left), right=self._expand_expr(expr.right)
+            )
         if isinstance(expr, UnaryOp):
             return replace(expr, value=self._expand_expr(expr.value))
         if isinstance(expr, Select):
