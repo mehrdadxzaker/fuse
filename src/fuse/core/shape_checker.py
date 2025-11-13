@@ -33,13 +33,28 @@ REDUCTION_FUNCS = {
 
 
 def validate_program_shapes(ir: ProgramIR) -> None:
+    # Group equations by LHS name to detect accumulation patterns
+    lhs_groups: Dict[str, List[Equation]] = {}
     for eq in ir.equations:
         if eq.is_source or eq.is_sink or eq.rhs is None:
             continue
-        _validate_equation(eq)
+        lhs_groups.setdefault(eq.lhs.name, []).append(eq)
+
+    # Track which equations are part of accumulation patterns
+    accumulation_eqs: Set[int] = set()
+    for name, eqs in lhs_groups.items():
+        if len(eqs) > 1:
+            # Multiple equations with same LHS = accumulation pattern
+            for eq in eqs:
+                accumulation_eqs.add(id(eq))
+
+    for eq in ir.equations:
+        if eq.is_source or eq.is_sink or eq.rhs is None:
+            continue
+        _validate_equation(eq, is_accumulation=id(eq) in accumulation_eqs)
 
 
-def _validate_equation(eq: Equation) -> None:
+def _validate_equation(eq: Equation, is_accumulation: bool = False) -> None:
     usage = _collect_axis_usage(eq.rhs, eq)
     if isinstance(eq.rhs, FuncCall):
         usage = _adjust_usage_for_func(eq, eq.rhs, usage)
@@ -57,24 +72,34 @@ def _validate_equation(eq: Equation) -> None:
     lhs_axis_set: Set[str] = set(lhs_axes)
     dotted_axes: Set[str] = set(eq.lhs.dotted_axes)
 
-    missing_axes = sorted(axis for axis in lhs_axis_set if axis not in usage)
+    # In accumulation patterns, RHS can have subset of LHS axes (broadcast)
+    if is_accumulation:
+        # Don't require all LHS axes to be present in RHS
+        missing_axes = []
+    else:
+        missing_axes = sorted(axis for axis in lhs_axis_set if axis not in usage)
 
-    # An axis is stray if it's not in LHS and either:
-    # 1. It appears in only one source AND appears only once (not contracted)
-    # 2. For axes from a single source appearing multiple times (like d in Emb[i,d] * Emb[j,d]),
-    #    they are being contracted and should NOT be considered stray
+    # Check for stray axes (in RHS but not LHS)
     stray_axes = []
+
     for axis, info in usage.items():
         if axis in lhs_axis_set:
             continue
+
         # If axis appears multiple times, it's being contracted (not stray)
         if info.count > 1:
             continue
-        # If axis appears in multiple sources, it's being joined (may or may not be stray)
-        if len(info.sources) > 1:
+
+        # For projection operations on compiler temporaries (like __red0),
+        # extra axes are expected as they're being explicitly reduced
+        is_reduce_temp = eq.lhs.name.startswith("__red") and eq.projection in ("sum", "max", "mean")
+        if is_reduce_temp:
             continue
-        # Single source, single appearance = stray
-        stray_axes.append(axis)
+
+        # Single source, single appearance = potentially stray
+        if len(info.sources) <= 1:
+            stray_axes.append(axis)
+
     stray_axes = sorted(stray_axes)
 
     # TensorRef-only assignments behave like broadcast; project-only axes are not allowed.
