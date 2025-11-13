@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-
+from typing import Any, Dict, List, Optional, Tuple
 
 # NOTE: This module defines a lightweight, decoupled AST for the new
 # statement + expression grammar. It does not replace the existing IR.

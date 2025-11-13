@@ -1,11 +1,12 @@
 import numpy as np
 import pytest
 
-hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import given, strategies as st
-
-from fuse.core.program import Program
 from fuse.core.evaluator_numpy import ExecutionConfig
+from fuse.core.program import Program
+
+hypothesis = pytest.importorskip("hypothesis")
+from hypothesis import given  # noqa: E402
+from hypothesis import strategies as st  # noqa: E402
 
 
 @st.composite

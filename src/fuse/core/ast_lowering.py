@@ -1,29 +1,40 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
 import re
+from typing import Any, Dict, List, Optional
 
 from .ast import (
     BinOp,
     Block,
     Call,
-    Equation as AstEquation,
     FnDef,
     Let,
-    Lhs as AstLhs,
     Piecewise,
-    Program as AstProgram,
-    Reduce as AstReduce,
     Select,
-    Tensor as AstTensor,
     UnaryOp,
+)
+from .ast import (
+    Equation as AstEquation,
+)
+from .ast import (
+    Lhs as AstLhs,
+)
+from .ast import (
+    Program as AstProgram,
+)
+from .ast import (
+    Reduce as AstReduce,
+)
+from .ast import (
+    Tensor as AstTensor,
 )
 from .ir import Equation, FuncCall, ProgramIR, TensorRef, Term
 
 
 def _collect_ir_indices(expr: Any, out: Dict[str, None]) -> None:
-    from .ir import FuncCall as IRFuncCall, IndexFunction, TensorRef as IRTensorRef, Term as IRTerm
+    from .ir import FuncCall as IRFuncCall
+    from .ir import TensorRef as IRTensorRef
+    from .ir import Term as IRTerm
 
     if isinstance(expr, IRTensorRef):
         for idx in getattr(expr, "indices", []) or []:
@@ -48,8 +59,8 @@ def _collect_ir_indices(expr: Any, out: Dict[str, None]) -> None:
             if isinstance(v, (IRTerm, IRFuncCall, IRTensorRef)):
                 _collect_ir_indices(v, out)
         return
-    if hasattr(expr, "axis") and hasattr(expr, "name") and getattr(expr, "name") == "index_fn":  # pragma: no cover
-        out.setdefault(str(getattr(expr, "axis")), None)
+    if hasattr(expr, "axis") and hasattr(expr, "name") and expr.name == "index_fn":  # pragma: no cover
+        out.setdefault(str(expr.axis), None)
         return
     # literals/others ignored
 
@@ -317,6 +328,7 @@ class _Lowerer:
 
     def _load_imports(self, prog: AstProgram) -> None:
         from pathlib import Path
+
         from .parser_expr import parse_program as _parse
 
         for imp in getattr(prog, "imports", []) or []:
@@ -348,7 +360,6 @@ class _Lowerer:
 
     # Constants evaluation -----------------------------------------------------
     def _eval_const_expr(self, expr: Any) -> Any:
-        from math import sqrt
         if isinstance(expr, (int, float)):
             return expr
         if isinstance(expr, str):
@@ -403,7 +414,7 @@ class _Lowerer:
         actual_dims: List[List[str]] = []
         for expr in actual_ir:
             if hasattr(expr, "indices"):
-                actual_dims.append(list(getattr(expr, "indices")))
+                actual_dims.append(list(expr.indices))
             else:
                 actual_dims.append([])
         # derive global extras and dims mapping

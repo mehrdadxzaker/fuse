@@ -1,7 +1,7 @@
 import pytest
 
-from fuse.core.parser_expr import parse_program
 from fuse.core.ast import pretty_print_old_style
+from fuse.core.parser_expr import parse_program
 
 
 @pytest.mark.parametrize(

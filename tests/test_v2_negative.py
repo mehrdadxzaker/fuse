@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from fuse.core.program import Program
-from fuse.core.evaluator_numpy import ExecutionConfig
 from fuse.core.ast_lowering import lower_to_ir
+from fuse.core.evaluator_numpy import ExecutionConfig
 from fuse.core.parser_expr import parse_program
+from fuse.core.program import Program
 
 
 def test_fn_axis_ambiguity_error():
@@ -24,7 +24,7 @@ def test_masked_softmax_non_broadcastable_mask():
     runner = prog.compile(backend="numpy", config=ExecutionConfig())
     x = np.ones((4, 5), dtype=np.float32)
     m = np.ones((3,), dtype=np.int8)  # wrong shape
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         runner.run(inputs={"x": x, "m": m})
 
 

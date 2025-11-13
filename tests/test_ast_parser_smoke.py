@@ -1,5 +1,5 @@
+from fuse.core.ast import Block, Equation, Let, pretty_print_old_style
 from fuse.core.parser_expr import parse_program
-from fuse.core.ast import pretty_print_old_style, Equation, Let, Block
 
 
 def test_parse_and_pretty_print_smoke():
