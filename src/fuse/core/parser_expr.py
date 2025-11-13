@@ -155,7 +155,14 @@ class _AstXform(Transformer):
 
     # Functions ---------------------------------------------------------------
     def fn_params(self, items):
-        return list(items)
+        # Extract Lhs from Tree objects if needed
+        result = []
+        for item in items:
+            if hasattr(item, "data") and item.data == "fn_param" and item.children:
+                result.append(item.children[0])
+            else:
+                result.append(item)
+        return result
 
     @v_args(meta=True)
     def fn_def(self, meta, items):
@@ -274,7 +281,11 @@ class _AstXform(Transformer):
             if isinstance(it, tuple) and len(it) == 2 and isinstance(it[0], str):
                 kwargs[it[0]] = it[1]
             else:
-                pos.append(it)
+                # Extract expression from Tree if it's a call_arg Tree
+                if hasattr(it, "data") and it.data == "call_arg" and it.children:
+                    pos.append(it.children[0])
+                else:
+                    pos.append(it)
         return (pos, kwargs)
 
     def call(self, items):
