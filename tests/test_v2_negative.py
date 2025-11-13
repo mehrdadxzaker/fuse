@@ -9,9 +9,7 @@ from fuse.core.program import Program
 
 def test_fn_axis_ambiguity_error():
     src = (
-        'fn bad(a[x], b[x]) -> y[] { y[] = a[x] * b[x]; }\n'
-        'z[i,j] = bad(E[i,d], F[i,e]);\n'
-        'export z;'
+        "fn bad(a[x], b[x]) -> y[] { y[] = a[x] * b[x]; }\nz[i,j] = bad(E[i,d], F[i,e]);\nexport z;"
     )
     ast_prog = parse_program(src)
     with pytest.raises(ValueError):
@@ -19,7 +17,7 @@ def test_fn_axis_ambiguity_error():
 
 
 def test_masked_softmax_non_broadcastable_mask():
-    src = 'y[i,j] = @softmax(x[i,j], axis=j, mask=m[i]); export y;'
+    src = "y[i,j] = @softmax(x[i,j], axis=j, mask=m[i]); export y;"
     prog = Program(src, parser="v2")
     runner = prog.compile(backend="numpy", config=ExecutionConfig())
     x = np.ones((4, 5), dtype=np.float32)
@@ -29,8 +27,7 @@ def test_masked_softmax_non_broadcastable_mask():
 
 
 def test_reduce_op_unsupported():
-    src = 'y[] = reduce(prod, i) x[i]; export y;'
+    src = "y[] = reduce(prod, i) x[i]; export y;"
     ast_prog = parse_program(src)
     with pytest.raises(NotImplementedError):
         lower_to_ir(ast_prog)
-

@@ -59,7 +59,9 @@ def _collect_ir_indices(expr: Any, out: Dict[str, None]) -> None:
             if isinstance(v, (IRTerm, IRFuncCall, IRTensorRef)):
                 _collect_ir_indices(v, out)
         return
-    if hasattr(expr, "axis") and hasattr(expr, "name") and expr.name == "index_fn":  # pragma: no cover
+    if (
+        hasattr(expr, "axis") and hasattr(expr, "name") and expr.name == "index_fn"
+    ):  # pragma: no cover
         out.setdefault(str(expr.axis), None)
         return
     # literals/others ignored
@@ -129,11 +131,11 @@ class _Lowerer:
         OFFSET_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_']*)([+-]\d+)?$")
 
         index_specs: List[IndexSpec] = []
-        for raw in (t.dims or []):
+        for raw in t.dims or []:
             token = str(raw).strip()
             if not token:
                 continue
-            dotted = token.endswith('.')
+            dotted = token.endswith(".")
             if dotted:
                 token = token[:-1].strip()
 
@@ -141,21 +143,27 @@ class _Lowerer:
             offset = 0
             axis_name = ""
 
-            if token.startswith('*'):
+            if token.startswith("*"):
                 m = STREAM_RE.match(token)
                 if not m:
                     raise ValueError(f"Invalid streaming index token: {raw}")
                 axis_name = m.group(1)
                 rolling_offset = int(m.group(2) or 0)
                 rolling[axis_name] = rolling_offset
-            elif ':' in token:
-                parts = [p.strip() for p in token.split(':')]
+            elif ":" in token:
+                parts = [p.strip() for p in token.split(":")]
                 if len(parts) not in (2, 3):
                     raise ValueError(f"Invalid slice token: {raw}")
+
                 def _b(s: str) -> Optional[int]:
-                    return None if s == '' else int(s)
-                slice_spec = SliceSpec(start=_b(parts[0]), stop=_b(parts[1]), step=_b(parts[2]) if len(parts) == 3 else None)
-                axis_name = ':'.join(parts)
+                    return None if s == "" else int(s)
+
+                slice_spec = SliceSpec(
+                    start=_b(parts[0]),
+                    stop=_b(parts[1]),
+                    step=_b(parts[2]) if len(parts) == 3 else None,
+                )
+                axis_name = ":".join(parts)
             else:
                 m = OFFSET_RE.match(token)
                 if not m:
@@ -168,7 +176,13 @@ class _Lowerer:
                 dotted_axes.append(axis_name)
             index_specs.append(IndexSpec(axis=axis_name, offset=offset, slice=slice_spec))
 
-        return TensorRef(name=t.name, indices=indices, dotted_axes=dotted_axes, rolling=rolling, index_specs=index_specs)
+        return TensorRef(
+            name=t.name,
+            indices=indices,
+            dotted_axes=dotted_axes,
+            rolling=rolling,
+            index_specs=index_specs,
+        )
 
     def _term(self, *factors: Any) -> Term:
         flat: List[Any] = []
@@ -184,7 +198,11 @@ class _Lowerer:
         return FuncCall(name="case", arg=tuple(args), kwargs={})
 
     def _select_to_case(self, sel: Select) -> FuncCall:
-        return self._case(self._lower_expr(sel.condition), self._lower_expr(sel.then), self._lower_expr(sel.otherwise))
+        return self._case(
+            self._lower_expr(sel.condition),
+            self._lower_expr(sel.then),
+            self._lower_expr(sel.otherwise),
+        )
 
     def _piecewise_to_case(self, node: Piecewise) -> FuncCall:
         args: List[Any] = []
@@ -238,7 +256,9 @@ class _Lowerer:
             if op == "+":
                 self.equations.append(Equation(lhs=lhs, rhs=right, projection="sum"))
             else:
-                self.equations.append(Equation(lhs=lhs, rhs=self._term(-1, right), projection="sum"))
+                self.equations.append(
+                    Equation(lhs=lhs, rhs=self._term(-1, right), projection="sum")
+                )
             return TensorRef(name=name, indices=idxs, dotted_axes=[])
         if op == "/":
             left = self._lower_expr(node.left)
@@ -385,7 +405,7 @@ class _Lowerer:
             if expr.op == "/":
                 return a / b
             if expr.op == "**":
-                return a ** b
+                return a**b
             raise ValueError(f"Unsupported binary in constant: {expr.op}")
         raise ValueError("Unsupported constant expression")
 
@@ -406,7 +426,9 @@ class _Lowerer:
     def _inline_function(self, fn: FnDef, call: Call) -> Any:
         # Map formals to actuals (positional only for now)
         if len(call.args) != len(fn.params):
-            raise ValueError(f"Function '{fn.name}' expects {len(fn.params)} args; got {len(call.args)}")
+            raise ValueError(
+                f"Function '{fn.name}' expects {len(fn.params)} args; got {len(call.args)}"
+            )
         actual_ir = [self._lower_expr(arg) for arg in call.args]
 
         # Compute extras dims: right-align mapping of formals to actuals
@@ -507,9 +529,13 @@ class _Lowerer:
         if isinstance(expr, Select):
             return self._select_to_case(
                 Select(
-                    condition=self._lower_expr_with_env(expr.condition, name_map, local_dims, fn, actual_ir),
+                    condition=self._lower_expr_with_env(
+                        expr.condition, name_map, local_dims, fn, actual_ir
+                    ),
                     then=self._lower_expr_with_env(expr.then, name_map, local_dims, fn, actual_ir),
-                    otherwise=self._lower_expr_with_env(expr.otherwise, name_map, local_dims, fn, actual_ir),
+                    otherwise=self._lower_expr_with_env(
+                        expr.otherwise, name_map, local_dims, fn, actual_ir
+                    ),
                 )
             )
         if isinstance(expr, Piecewise):
@@ -522,20 +548,36 @@ class _Lowerer:
                         )
                         for c, v in expr.branches
                     ],
-                    default=self._lower_expr_with_env(expr.default, name_map, local_dims, fn, actual_ir)
+                    default=self._lower_expr_with_env(
+                        expr.default, name_map, local_dims, fn, actual_ir
+                    )
                     if expr.default is not None
                     else None,
                 )
             )
         if isinstance(expr, AstReduce):
-            return self._lower_reduce_expr(AstReduce(op=expr.op, value=self._lower_expr_with_env(expr.value, name_map, local_dims, fn, actual_ir), axes=list(expr.axes)))
+            return self._lower_reduce_expr(
+                AstReduce(
+                    op=expr.op,
+                    value=self._lower_expr_with_env(
+                        expr.value, name_map, local_dims, fn, actual_ir
+                    ),
+                    axes=list(expr.axes),
+                )
+            )
         if isinstance(expr, Call):
             name = expr.name
             if name in self._funcs:
                 # nested call
                 return self._inline_function(self._funcs[name], expr)
-            args = tuple(self._lower_expr_with_env(a, name_map, local_dims, fn, actual_ir) for a in (expr.args or []))
-            kwargs = {k: self._lower_expr_with_env(v, name_map, local_dims, fn, actual_ir) for k, v in (expr.kwargs or {}).items()}
+            args = tuple(
+                self._lower_expr_with_env(a, name_map, local_dims, fn, actual_ir)
+                for a in (expr.args or [])
+            )
+            kwargs = {
+                k: self._lower_expr_with_env(v, name_map, local_dims, fn, actual_ir)
+                for k, v in (expr.kwargs or {}).items()
+            }
             return FuncCall(name=name, arg=args if len(args) != 1 else args[0], kwargs=kwargs)
         if isinstance(expr, (int, float)):
             return expr

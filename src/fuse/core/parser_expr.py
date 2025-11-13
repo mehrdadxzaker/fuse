@@ -69,7 +69,7 @@ class _AstXform(Transformer):
             if item is None:
                 continue
             # Skip NEWLINE and separator tokens
-            if isinstance(item, Token) and item.type in ('NEWLINE', 'SEMICOLON'):
+            if isinstance(item, Token) and item.type in ("NEWLINE", "SEMICOLON"):
                 continue
             if isinstance(item, Import):
                 prog.imports.append(item)
@@ -95,7 +95,13 @@ class _AstXform(Transformer):
         if len(items) > 1:
             alias_tok: Token = items[1]
             alias = alias_tok.value
-        return Import(path=_ast.literal_eval(path_tok.value), alias=alias, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Import(
+            path=_ast.literal_eval(path_tok.value),
+            alias=alias,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     @v_args(meta=True)
     def export_stmt(self, meta, items):
@@ -114,19 +120,38 @@ class _AstXform(Transformer):
             items = items[1:]
         if items:
             default = items[0]
-        return Param(name=name_tok.value, type_name=type_name, default=default, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Param(
+            name=name_tok.value,
+            type_name=type_name,
+            default=default,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     @v_args(meta=True)
     def axis(self, meta, items):
         name_tok: Token = items[0]
         value = items[1] if len(items) > 1 else None
-        return AxisDecl(name=name_tok.value, value=value, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return AxisDecl(
+            name=name_tok.value,
+            value=value,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     @v_args(meta=True)
     def const(self, meta, items):
         name_tok: Token = items[0]
         value = items[1]
-        return Const(name=name_tok.value, value=value, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Const(
+            name=name_tok.value,
+            value=value,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     # Functions ---------------------------------------------------------------
     def fn_params(self, items):
@@ -145,7 +170,15 @@ class _AstXform(Transformer):
             cursor += 1
         if cursor < len(items) - 1 and isinstance(items[cursor], Lhs):
             ret_lhs = items[cursor]
-        return FnDef(name=name, params=params or [], returns=ret_lhs, body=body, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return FnDef(
+            name=name,
+            params=params or [],
+            returns=ret_lhs,
+            body=body,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     # Statements --------------------------------------------------------------
     def stmt(self, items):
@@ -153,14 +186,27 @@ class _AstXform(Transformer):
 
     @v_args(meta=True)
     def equation(self, meta, items):
-        return Equation(lhs=items[0], rhs=items[1], line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Equation(
+            lhs=items[0],
+            rhs=items[1],
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     @v_args(meta=True)
     def equation_when(self, meta, items):
         lhs = items[0]
         guard = items[1]
         rhs = items[2]
-        return Equation(lhs=lhs, rhs=rhs, guard=guard, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Equation(
+            lhs=lhs,
+            rhs=rhs,
+            guard=guard,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     def dims(self, items):
         return [tok.value if isinstance(tok, Token) else str(tok) for tok in items]
@@ -169,13 +215,25 @@ class _AstXform(Transformer):
     def lhs(self, meta, items):
         name_tok: Token = items[0]
         dims = items[1] if len(items) > 1 else []
-        return Lhs(name=name_tok.value, dims=dims, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Lhs(
+            name=name_tok.value,
+            dims=dims,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     @v_args(meta=True)
     def let_stmt(self, meta, items):
         lhs = items[0]
         value = items[1]
-        return Let(lhs=lhs, value=value, line=meta.line, column=meta.column, source=self._slice(meta).strip())
+        return Let(
+            lhs=lhs,
+            value=value,
+            line=meta.line,
+            column=meta.column,
+            source=self._slice(meta).strip(),
+        )
 
     def block(self, items):
         # items may contain nested statements
