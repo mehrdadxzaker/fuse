@@ -26,7 +26,7 @@ def test_elementwise_broadcast_sum(draw_input):
         return  # trivial
     head = axes[:-1]
     idx_head = ",".join(head)
-    src = f"z[{idx_head}] = reduce(sum, {axes[-1]}) x[{idx}] + y[{idx_head}]; export z;"
+    src = f"z[{idx_head}] = reduce(sum, {axes[-1]}) (x[{idx}] + y[{idx_head}]); export z;"
     prog = Program(src, parser="v2")
     runner = prog.compile(backend="numpy", config=ExecutionConfig())
     shape_full = tuple(sizes[a] for a in axes)
