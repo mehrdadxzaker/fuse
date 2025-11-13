@@ -10,7 +10,7 @@ def _eqs_for(ir, name):
 def test_fn_inline_dot_and_param_const_fold():
     src = (
         "param D: int = 128;\n"
-        "fn dot(a[x], b[x]) -> s[] { s[] = a[x] * b[x]; }\n"
+        "fn dot(a[x], b[x]) -> s { s = a[x] * b[x]; }\n"
         "sim[i,j] = dot(Emb[i,d], Emb[j,d]);\n"
         "top[i] = k_select(sim[i,j], k=D/8);\n"
     )

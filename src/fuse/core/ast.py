@@ -193,7 +193,14 @@ def _pp_expr(expr: Expr, parent_op: Optional[str] = None, side: str = "") -> str
     if isinstance(expr, UnaryOp):
         return f"{expr.op}{_pp_expr(expr.value, None)}"
     if isinstance(expr, Call) or isinstance(expr, FnCall):
-        args = ", ".join(_pp_expr(a, None) for a in expr.args)
+        # Handle Tree objects in args
+        processed_args = []
+        for a in expr.args:
+            if hasattr(a, "children") and a.children:
+                processed_args.append(a.children[0])
+            else:
+                processed_args.append(a)
+        args = ", ".join(_pp_expr(a, None) for a in processed_args)
         if getattr(expr, "kwargs", None):
             kw = ", ".join(f"{k}={_pp_expr(v)}" for k, v in expr.kwargs.items())
             args = ", ".join([x for x in [args, kw] if x])
@@ -284,7 +291,13 @@ def pretty_print_old_style(prog: Program) -> str:
         def _pp_lhs(lhs: Lhs) -> str:
             return f"{lhs.name}[{', '.join(lhs.dims)}]" if lhs.dims else lhs.name
 
-        header = f"fn {fn.name}({', '.join(_pp_lhs(p) for p in fn.params)})"
+        def _extract_lhs(param):
+            # Handle Tree objects from parser
+            if hasattr(param, "children") and param.children:
+                return param.children[0]
+            return param
+
+        header = f"fn {fn.name}({', '.join(_pp_lhs(_extract_lhs(p)) for p in fn.params)})"
         if fn.returns is not None:
             header += f" -> {_pp_lhs(fn.returns)}"
         lines.append(header + " {")
