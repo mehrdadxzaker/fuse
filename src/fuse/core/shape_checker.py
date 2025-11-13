@@ -59,9 +59,23 @@ def _validate_equation(eq: Equation) -> None:
 
     missing_axes = sorted(axis for axis in lhs_axis_set if axis not in usage)
 
-    stray_axes = sorted(
-        axis for axis, info in usage.items() if axis not in lhs_axis_set and len(info.sources) <= 1
-    )
+    # An axis is stray if it's not in LHS and either:
+    # 1. It appears in only one source AND appears only once (not contracted)
+    # 2. For axes from a single source appearing multiple times (like d in Emb[i,d] * Emb[j,d]),
+    #    they are being contracted and should NOT be considered stray
+    stray_axes = []
+    for axis, info in usage.items():
+        if axis in lhs_axis_set:
+            continue
+        # If axis appears multiple times, it's being contracted (not stray)
+        if info.count > 1:
+            continue
+        # If axis appears in multiple sources, it's being joined (may or may not be stray)
+        if len(info.sources) > 1:
+            continue
+        # Single source, single appearance = stray
+        stray_axes.append(axis)
+    stray_axes = sorted(stray_axes)
 
     # TensorRef-only assignments behave like broadcast; project-only axes are not allowed.
     rhs_is_tensor = isinstance(eq.rhs, TensorRef)
