@@ -62,10 +62,17 @@ class _AstXform(Transformer):
         return ""
 
     # Top-level ---------------------------------------------------------------
+    def toplevel(self, items):
+        # toplevel rule just passes through its single child
+        return items[0] if items else None
+
     def program(self, items: List[Any]) -> Program:
         prog = Program()
         for item in items:
             if item is None:
+                continue
+            # Skip NEWLINE and separator tokens
+            if isinstance(item, Token) and item.type in ('NEWLINE', 'SEMICOLON'):
                 continue
             if isinstance(item, Import):
                 prog.imports.append(item)
