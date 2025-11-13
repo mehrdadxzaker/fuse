@@ -1,7 +1,6 @@
-from fuse.core.parser_expr import parse_program
+from fuse.core.ast import Call, Equation, Let
 from fuse.core.macro_rewrite import expand_macros
-from fuse.core.ast import Call, Macro, Let, Equation
-from fuse.core.ast_lowering import lower_to_ir
+from fuse.core.parser_expr import parse_program
 
 
 def test_softmax_macro_expands_to_call():

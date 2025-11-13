@@ -1,6 +1,6 @@
-from fuse.core.parser_expr import parse_program
 from fuse.core.ast_lowering import lower_to_ir
-from fuse.core.ir import Equation, TensorRef, Term, FuncCall
+from fuse.core.ir import FuncCall, TensorRef, Term
+from fuse.core.parser_expr import parse_program
 
 
 def _eqs_for(ir, name):

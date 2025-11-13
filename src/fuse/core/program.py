@@ -24,9 +24,9 @@ class Program:
         if parser == "legacy":
             self.ir: ProgramIR = parse(eqs)  # type: ignore[misc]
         elif parser in {"v2", "expr"}:
-            from .parser_expr import parse_program as _parse_program_v2
-            from .macro_rewrite import expand_macros as _expand_macros
             from .ast_lowering import lower_to_ir as _lower_to_ir
+            from .macro_rewrite import expand_macros as _expand_macros
+            from .parser_expr import parse_program as _parse_program_v2
 
             ast_prog = _parse_program_v2(eqs)
             ast_prog = _expand_macros(ast_prog)

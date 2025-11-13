@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import ast as _ast
-from dataclasses import replace
 from pathlib import Path
-from typing import Any, List, Optional, Dict
+from typing import Any, Dict, List, Optional
 
 from lark import Lark, Token, Transformer, v_args
 from lark.exceptions import LarkError, UnexpectedInput
@@ -13,24 +12,22 @@ from .ast import (
     BinOp,
     Block,
     Call,
-    Macro,
-    Tensor,
     Const,
     Equation,
-    FnCall,
     FnDef,
     Import,
     Let,
-    Piecewise,
+    Lhs,
+    Macro,
     Param,
+    Piecewise,
     Program,
     Reduce,
     Select,
+    Tensor,
     UnaryOp,
-    Lhs,
 )
 from .exceptions import ParseError
-
 
 GRAMMAR_FILE = Path(__file__).with_name("expr_grammar.lark")
 
@@ -353,8 +350,8 @@ def parse_program(text: str) -> Program:
     except UnexpectedInput as exc:
         line = exc.line or 1
         column = exc.column or 1
-        raise ParseError("Syntax error while parsing program", line=line, column=column)
+        raise ParseError("Syntax error while parsing program", line=line, column=column) from exc
     except LarkError as exc:  # pragma: no cover - defensive
-        raise ParseError(str(exc))
+        raise ParseError(str(exc)) from exc
     xform = _AstXform(text)
     return xform.transform(tree)

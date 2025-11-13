@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Dict, List
+from typing import Any, List
 
 from .ast import (
     Block,
@@ -55,9 +55,9 @@ class MacroExpander:
             )
         # For structures that contain expressions, add cases as needed
         try:
-            from .ast import BinOp, UnaryOp, Select, Piecewise, Reduce, Tensor
+            from .ast import BinOp, Piecewise, Reduce, Select, UnaryOp
         except Exception:
-            BinOp = UnaryOp = Select = Piecewise = Reduce = Tensor = tuple()  # type: ignore
+            BinOp = UnaryOp = Select = Piecewise = Reduce = tuple()  # type: ignore
         if isinstance(expr, BinOp):
             return replace(expr, left=self._expand_expr(expr.left), right=self._expand_expr(expr.right))
         if isinstance(expr, UnaryOp):
