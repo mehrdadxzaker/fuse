@@ -6,7 +6,8 @@ from fuse.core.program import Program
 
 PROG_SRC = (
     "param D:int = 16; axis i; axis j; axis d;\n"
-    "sim[i,j] = reduce(sum, d) Emb[i,d] * Emb[j,d];\n"  # Explicit reduction over d
+    "fn dot(a[d], b[d]) -> s { s = a[d] * b[d]; }\n"
+    "sim[i,j] = dot(Emb[i,d], Emb[j,d]);\n"
     "score[i] = reduce(sum, j) select(mask[i], sim[i,j], 0);\n"
     "export score;"
 )
