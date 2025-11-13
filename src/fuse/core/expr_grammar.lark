@@ -60,11 +60,17 @@ ternary: or_expr ("?" expr ":" expr)?
 
 or_expr: and_expr ("||" and_expr)*
 and_expr: add_expr ("&&" add_expr)*
-add_expr: mul_expr (("+"|"-") mul_expr)*
-mul_expr: unary   (("*"|"/") unary)*
+add_expr: mul_expr (ADD_OP mul_expr)*
+mul_expr: pow_expr (MUL_OP pow_expr)*
+pow_expr: unary ("**" pow_expr)?
+
+ADD_OP: "+" | "-"
+MUL_OP: "*" | "/"
 
 ?unary: primary
-      | ("-"|"!") unary     -> unary
+      | UNARY_OP unary     -> unary
+
+UNARY_OP: "-" | "!"
 
 ?primary: NUMBER            -> number
         | IDENT             -> ident
@@ -102,8 +108,3 @@ default_entry: "default" "->" expr
 
 reduce_expr: "reduce" "(" IDENT "," reduce_axes ")" expr
 reduce_axes: IDENT ("," IDENT)*
-
-// Power precedence (right-assoc)
-// Insert between unary and mul
-pow_expr: unary ("**" pow_expr)?
-mul_expr: pow_expr (("*"|"/") pow_expr)*
