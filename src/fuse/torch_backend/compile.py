@@ -168,9 +168,28 @@ INV_SQRT_2PI = 1.0 / math.sqrt(2.0 * math.pi)
 
 
 def _torch_gelu(x: torch.Tensor) -> torch.Tensor:
-    x64 = x.to(dtype=torch.float64)
-    y64 = 0.5 * x64 * (1.0 + torch.erf(x64 * SQRT1_2))
-    return y64.to(dtype=x.dtype)
+    # Check if the device supports float64
+    device = x.device
+    supports_float64 = True
+    if device.type == 'mps':
+        # MPS doesn't support float64
+        supports_float64 = False
+    elif device.type == 'cuda':
+        # Check if CUDA device supports float64
+        try:
+            test = torch.tensor([1.0], device=device, dtype=torch.float64)
+            supports_float64 = True
+        except (RuntimeError, TypeError):
+            supports_float64 = False
+
+    if supports_float64 and x.dtype != torch.float64:
+        # Use float64 for higher precision if supported
+        x64 = x.to(dtype=torch.float64)
+        y64 = 0.5 * x64 * (1.0 + torch.erf(x64 * SQRT1_2))
+        return y64.to(dtype=x.dtype)
+    else:
+        # Stay in current dtype (likely float32)
+        return 0.5 * x * (1.0 + torch.erf(x * SQRT1_2))
 
 
 def _coerce_scalar(value: Any) -> float:
@@ -578,11 +597,32 @@ def _torch_const(
 
 
 def _torch_gelu_grad(x: torch.Tensor) -> torch.Tensor:
-    x64 = x.to(dtype=torch.float64)
-    cdf64 = 0.5 * (1.0 + torch.erf(x64 * SQRT1_2))
-    pdf64 = torch.exp(-0.5 * x64 * x64) * INV_SQRT_2PI
-    grad64 = cdf64 + x64 * pdf64
-    return grad64.to(dtype=x.dtype)
+    # Check if the device supports float64
+    device = x.device
+    supports_float64 = True
+    if device.type == 'mps':
+        # MPS doesn't support float64
+        supports_float64 = False
+    elif device.type == 'cuda':
+        # Check if CUDA device supports float64
+        try:
+            test = torch.tensor([1.0], device=device, dtype=torch.float64)
+            supports_float64 = True
+        except (RuntimeError, TypeError):
+            supports_float64 = False
+
+    if supports_float64 and x.dtype != torch.float64:
+        # Use float64 for higher precision if supported
+        x64 = x.to(dtype=torch.float64)
+        cdf64 = 0.5 * (1.0 + torch.erf(x64 * SQRT1_2))
+        pdf64 = torch.exp(-0.5 * x64 * x64) * INV_SQRT_2PI
+        grad64 = cdf64 + x64 * pdf64
+        return grad64.to(dtype=x.dtype)
+    else:
+        # Stay in current dtype (likely float32)
+        cdf = 0.5 * (1.0 + torch.erf(x * SQRT1_2))
+        pdf = torch.exp(-0.5 * x * x) * INV_SQRT_2PI
+        return cdf + x * pdf
 
 
 def _torch_softmax_grad(y: torch.Tensor, grad: torch.Tensor, axis: int) -> torch.Tensor:
