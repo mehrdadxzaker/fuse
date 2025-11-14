@@ -1753,7 +1753,7 @@ class TorchRunner:
                 if cond.ndim < value.ndim:
                     # Determine which dimensions to expand based on the shape matching
                     # Try to match trailing dimensions
-                    for i in range(value.ndim - cond.ndim):
+                    for _ in range(value.ndim - cond.ndim):
                         cond = cond.unsqueeze(0)
                 if result is None:
                     result = torch.zeros_like(value)

@@ -1217,7 +1217,7 @@ class JaxRunner:
                 if cond.ndim < value.ndim:
                     # Determine which dimensions to expand based on the shape matching
                     # Try to match trailing dimensions
-                    for i in range(value.ndim - cond.ndim):
+                    for _ in range(value.ndim - cond.ndim):
                         cond = jnp.expand_dims(cond, axis=0)
                 if result is None:
                     result = jnp.zeros_like(value)
