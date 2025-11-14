@@ -1126,14 +1126,26 @@ class NumpyRunner:
                 metas.append(meta)
                 temps_used = list(self._sig_temperatures)
                 if self._is_boolean_tensor(lhs_name):
-                    running_total = (
-                        value_arr if running_total is None else np.maximum(running_total, value_arr)
-                    )
+                    if running_total is not None:
+                        # Ensure value_arr can broadcast with running_total
+                        if value_arr.ndim < running_total.ndim:
+                            # Add trailing dimensions to match running_total
+                            for _ in range(running_total.ndim - value_arr.ndim):
+                                value_arr = np.expand_dims(value_arr, axis=-1)
+                        running_total = np.maximum(running_total, value_arr)
+                    else:
+                        running_total = value_arr
                     self.tensors[lhs_name] = running_total
                 else:
-                    running_total = (
-                        value_arr if running_total is None else running_total + value_arr
-                    )
+                    if running_total is not None:
+                        # Ensure value_arr can broadcast with running_total
+                        if value_arr.ndim < running_total.ndim:
+                            # Add trailing dimensions to match running_total
+                            for _ in range(running_total.ndim - value_arr.ndim):
+                                value_arr = np.expand_dims(value_arr, axis=-1)
+                        running_total = running_total + value_arr
+                    else:
+                        running_total = value_arr
                     self.tensors[lhs_name] = running_total
         finally:
             self._active_lhs = None

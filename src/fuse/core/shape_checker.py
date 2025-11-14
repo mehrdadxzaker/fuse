@@ -42,7 +42,7 @@ def validate_program_shapes(ir: ProgramIR) -> None:
 
     # Track which equations are part of accumulation patterns
     accumulation_eqs: Set[int] = set()
-    for name, eqs in lhs_groups.items():
+    for _, eqs in lhs_groups.items():
         if len(eqs) > 1:
             # Multiple equations with same LHS = accumulation pattern
             for eq in eqs:
