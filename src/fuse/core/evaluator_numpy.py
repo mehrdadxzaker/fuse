@@ -2026,6 +2026,15 @@ class NumpyRunner:
             for cond_expr, value_expr in pairs:
                 value = _to_numpy_array(self._eval(value_expr, lhs=lhs))
                 cond = _to_numpy_array(self._eval(cond_expr, lhs=lhs)).astype(bool)
+                # Ensure cond can broadcast with value by expanding dimensions if needed
+                # The condition should have shape that is broadcastable with value
+                # For example, if value is [p,d] and cond is [d], expand to [1,d]
+                # If value is [i,j] and cond is [i], expand to [i,1]
+                if cond.ndim < value.ndim:
+                    # Determine which dimensions to expand based on the shape matching
+                    # Try to match trailing dimensions
+                    for i in range(value.ndim - cond.ndim):
+                        cond = np.expand_dims(cond, axis=0)
                 if result is None:
                     result = np.zeros_like(value)
                 result = np.where(cond, value, result)
