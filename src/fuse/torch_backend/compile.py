@@ -1117,6 +1117,27 @@ class TorchRunner:
         if isinstance(rhs, FuncCall):
             value = self._eval_fn(rhs, lhs=eq.lhs)
             meta = {"op": rhs.name}
+
+            # Apply projection if specified
+            if eq.projection and isinstance(value, torch.Tensor):
+                lhs_indices = [idx for idx in eq.lhs.indices if idx not in eq.lhs.rolling]
+                value_shape = value.shape
+
+                # If value has more dimensions than LHS expects, project the extra ones
+                if len(value_shape) > len(lhs_indices):
+                    axes_to_project = list(range(len(lhs_indices), len(value_shape)))
+                    if eq.projection == "sum":
+                        for axis in reversed(sorted(axes_to_project)):
+                            value = torch.sum(value, dim=axis)
+                    elif eq.projection == "max":
+                        for axis in reversed(sorted(axes_to_project)):
+                            value = torch.max(value, dim=axis).values
+                    elif eq.projection == "mean":
+                        for axis in reversed(sorted(axes_to_project)):
+                            value = torch.mean(value, dim=axis)
+                    meta["projection"] = eq.projection
+                    meta["projected_axes"] = axes_to_project
+
             if isinstance(value, torch.Tensor):
                 value = self._ensure_boolean_tensor(lhs_name, value)
             return value, meta
@@ -1725,6 +1746,15 @@ class TorchRunner:
             for cond_expr, value_expr in pairs:
                 value = self._as_tensor(self._eval(value_expr, lhs=lhs))
                 cond = self._as_tensor(self._eval(cond_expr, lhs=lhs)).to(dtype=torch.bool)
+                # Ensure cond can broadcast with value by expanding dimensions if needed
+                # The condition should have shape that is broadcastable with value
+                # For example, if value is [p,d] and cond is [d], expand to [1,d]
+                # If value is [i,j] and cond is [i], expand to [i,1]
+                if cond.ndim < value.ndim:
+                    # Determine which dimensions to expand based on the shape matching
+                    # Try to match trailing dimensions
+                    for i in range(value.ndim - cond.ndim):
+                        cond = cond.unsqueeze(0)
                 if result is None:
                     result = torch.zeros_like(value)
                 result = torch.where(cond, value, result)
