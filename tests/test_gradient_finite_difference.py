@@ -81,7 +81,14 @@ def _gradient_outputs(
     )
     runner = grad_program.program.compile(backend=backend, config=ExecutionConfig(mode="single"))
     outputs = runner()
-    return {name: np.asarray(outputs[f"Grad_{name}"], dtype=np.float32) for name in export_grads}
+    result = {}
+    for name in export_grads:
+        grad_tensor = outputs[f"Grad_{name}"]
+        # Handle torch tensors that may be on GPU/MPS
+        if hasattr(grad_tensor, 'cpu'):
+            grad_tensor = grad_tensor.cpu()
+        result[name] = np.asarray(grad_tensor, dtype=np.float32)
+    return result
 
 
 @pytest.mark.parametrize(
