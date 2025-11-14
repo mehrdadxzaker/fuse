@@ -1288,11 +1288,62 @@ class NumpyRunner:
         if isinstance(rhs, FuncCall):
             value = self._eval_fn(rhs, lhs=eq.lhs)
             meta = {"op": rhs.name}
+
+            # Apply projection if specified
+            if eq.projection and eq.projection != "sum":
+                # Determine which axes to project
+                lhs_indices = [idx for idx in eq.lhs.indices if idx not in eq.lhs.rolling]
+                value_shape = np.asarray(value).shape
+
+                # If value has more dimensions than LHS expects, project the extra ones
+                if len(value_shape) > len(lhs_indices):
+                    axes_to_project = list(range(len(lhs_indices), len(value_shape)))
+                    if eq.projection == "max":
+                        for axis in reversed(sorted(axes_to_project)):
+                            value = np.max(value, axis=axis)
+                    elif eq.projection == "mean":
+                        for axis in reversed(sorted(axes_to_project)):
+                            value = np.mean(value, axis=axis)
+                    meta["projection"] = eq.projection
+                    meta["projected_axes"] = axes_to_project
+            elif eq.projection == "sum":
+                # For sum projection, also handle dimension reduction
+                lhs_indices = [idx for idx in eq.lhs.indices if idx not in eq.lhs.rolling]
+                value_shape = np.asarray(value).shape
+
+                if len(value_shape) > len(lhs_indices):
+                    axes_to_project = list(range(len(lhs_indices), len(value_shape)))
+                    for axis in reversed(sorted(axes_to_project)):
+                        value = np.sum(value, axis=axis)
+                    meta["projected_axes"] = axes_to_project
+
             value = self._normalize_boolean(lhs_name, value)
             return value, meta
         value = self._eval(rhs, lhs=eq.lhs)
+        meta = {}
+
+        # Apply projection if specified for non-Term, non-FuncCall RHS (e.g., TensorRef)
+        if eq.projection and isinstance(rhs, TensorRef):
+            lhs_indices = [idx for idx in eq.lhs.indices if idx not in eq.lhs.rolling]
+            value_np = np.asarray(value)
+
+            # If value has more dimensions than LHS expects, project the extra ones
+            if value_np.ndim > len(lhs_indices):
+                axes_to_project = list(range(len(lhs_indices), value_np.ndim))
+                if eq.projection == "sum":
+                    for axis in reversed(sorted(axes_to_project)):
+                        value = np.sum(value, axis=axis)
+                elif eq.projection == "max":
+                    for axis in reversed(sorted(axes_to_project)):
+                        value = np.max(value, axis=axis)
+                elif eq.projection == "mean":
+                    for axis in reversed(sorted(axes_to_project)):
+                        value = np.mean(value, axis=axis)
+                meta["projection"] = eq.projection
+                meta["projected_axes"] = axes_to_project
+
         value = self._normalize_boolean(lhs_name, value)
-        return value, {}
+        return value, meta
 
     def _eval(self, expr: Any, lhs: Optional[TensorRef] = None):
         if isinstance(expr, TensorRef):
@@ -2350,6 +2401,8 @@ def _factor_indices(factor: Any) -> List[str]:
     if isinstance(factor, TensorRef):
         return [idx for idx in factor.indices if idx not in factor.rolling]
     if isinstance(factor, FuncCall):
+        # Use the first tensor ref to approximate dimensions
+        # This works for element-wise functions but may be incorrect for broadcasting
         tref = _first_tensor_ref(factor)
         if tref is None:
             return []

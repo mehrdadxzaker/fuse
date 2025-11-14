@@ -211,6 +211,11 @@ def _pp_expr(expr: Expr, parent_op: Optional[str] = None, side: str = "") -> str
     if isinstance(expr, Select):
         return f"{_pp_expr(expr.condition)} ? {_pp_expr(expr.then)} : {_pp_expr(expr.otherwise)}"
     if isinstance(expr, Piecewise):
+        # Special case: single branch with default -> format as ternary without extra parens
+        if len(expr.branches) == 1 and expr.default is not None:
+            cond, then_val = expr.branches[0]
+            return f"{_pp_expr(cond)} ? {_pp_expr(then_val)} : {_pp_expr(expr.default)}"
+        # General case: multiple branches
         parts = [f"({_pp_expr(c)}) ? {_pp_expr(v)}" for c, v in expr.branches]
         if expr.default is not None:
             parts.append(f": {_pp_expr(expr.default)}")

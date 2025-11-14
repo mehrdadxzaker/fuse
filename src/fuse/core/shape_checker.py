@@ -94,6 +94,8 @@ def _validate_equation(eq: Equation, is_accumulation: bool = False) -> None:
         # extra axes are expected as they're being explicitly reduced
         is_reduce_temp = eq.lhs.name.startswith("__red") and eq.projection in ("sum", "max", "mean")
         if is_reduce_temp:
+            # DEBUG: Uncomment to trace
+            # print(f"DEBUG: Skipping axis {axis} for reduce temp {eq.lhs.name}")
             continue
 
         # Single source, single appearance = potentially stray
@@ -105,7 +107,10 @@ def _validate_equation(eq: Equation, is_accumulation: bool = False) -> None:
     # TensorRef-only assignments behave like broadcast; project-only axes are not allowed.
     rhs_is_tensor = isinstance(eq.rhs, TensorRef)
     if rhs_is_tensor:
-        stray_axes = sorted(axis for axis in usage if axis not in lhs_axis_set)
+        # For reduce temporaries, extra axes are being reduced and are allowed
+        is_reduce_temp = eq.lhs.name.startswith("__red") and eq.projection in ("sum", "max", "mean")
+        if not is_reduce_temp:
+            stray_axes = sorted(axis for axis in usage if axis not in lhs_axis_set)
 
     if not missing_axes and not stray_axes:
         return
