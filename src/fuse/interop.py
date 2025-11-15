@@ -209,6 +209,9 @@ def to_torchscript(
         config=config,
         policies=runtime_policies,
     )
+    # Pre-materialize weights to avoid non-deterministic tensor creation during tracing
+    if hasattr(runner, 'pre_materialize_weights'):
+        runner.pre_materialize_weights()
     input_names, tensors = _prepare_example_tensors(example_inputs, runner.device)
     module = _FuseTorchModule(runner, input_names)
     module.eval()
