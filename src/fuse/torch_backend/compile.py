@@ -2005,6 +2005,14 @@ class TorchRunner:
             tref = _first_tensor_ref(arg_expr)
             if tref and spec in tref.indices:
                 return tref.indices.index(spec)
+        # Handle TensorRef representing an axis name (e.g., axis=j parsed as TensorRef)
+        if isinstance(spec, TensorRef) and spec.name and not spec.indices:
+            axis_name = spec.name
+            if lhs and axis_name in lhs.indices:
+                return lhs.indices.index(axis_name)
+            tref = _first_tensor_ref(arg_expr)
+            if tref and axis_name in tref.indices:
+                return tref.indices.index(axis_name)
         raise ValueError(f"Cannot resolve axis specification: {spec}")
 
     # FX Graph ----------------------------------------------------------------
