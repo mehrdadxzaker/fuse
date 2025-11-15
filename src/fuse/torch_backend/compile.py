@@ -745,6 +745,8 @@ class TorchRunner:
         self._active_equation_temperature: Optional[float] = None
         self._sig_temperatures: List[float] = []
         self._temperature_zero_tol = 1e-9
+        # Guard flag to prevent recursive FX builds while tracing
+        self._is_tracing: bool = False
 
         self._sources: List[Equation] = []
         self._sinks: List[Equation] = []
@@ -841,7 +843,8 @@ class TorchRunner:
                 input_feed_for_trace[name] = tensor_val
             fx_sig = tuple(sorted(sig_items, key=lambda x: x[0]))
 
-            if getattr(self, "_fx_sig_key", None) != fx_sig:
+            # Only (re)build the FX graph when not inside a tracing context
+            if not self._is_tracing and getattr(self, "_fx_sig_key", None) != fx_sig:
                 module = self._load_or_build_fx(
                     input_signature=fx_sig, input_feed=input_feed_for_trace
                 )
@@ -2081,6 +2084,7 @@ class TorchRunner:
 
         trace_runner = _TorchTraceHarness(self, input_feed=input_feed)
         try:
+            self._is_tracing = True
             with torch.no_grad():
                 gm = symbolic_trace(trace_runner)
             gm.to(self.device)
@@ -2088,6 +2092,8 @@ class TorchRunner:
             return gm
         except Exception:
             return None
+        finally:
+            self._is_tracing = False
 
 
 if torch is not None:
