@@ -764,16 +764,21 @@ class TorchRunner:
         except Exception:
             pass
 
-        # Build/load FX graph and optionally wrap with torch.compile
+        # Build/load FX graph and optionally wrap with torch.compile.
+        # If the program requires dynamic runtime inputs (no weights for some
+        # used tensors), defer FX construction until run() receives inputs and
+        # we can derive a concrete signature.
         self._fx_sig_key: Optional[Tuple[Any, ...]] = None
-        self.fx_module: Optional[GraphModule] = self._load_or_build_fx()
+        self.fx_module: Optional[GraphModule] = None
         self._fx_callable = None
-        if self.fx_module is not None:
-            try:
-                compiled = _maybe_torch_compile(self.fx_module)
-                self._fx_callable = compiled
-            except Exception:
-                self._fx_callable = self.fx_module
+        if not self.fx_input_names:
+            self.fx_module = self._load_or_build_fx()
+            if self.fx_module is not None:
+                try:
+                    compiled = _maybe_torch_compile(self.fx_module)
+                    self._fx_callable = compiled
+                except Exception:
+                    self._fx_callable = self.fx_module
 
     # Public API -------------------------------------------------------------
     def __call__(
