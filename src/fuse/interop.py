@@ -216,7 +216,8 @@ def to_torchscript(
     module = _FuseTorchModule(runner, input_names)
     module.eval()
     with torch.no_grad():
-        scripted = torch.jit.trace(module, tuple(tensors), strict=False)
+        # Use trace with check_trace=False to avoid non-determinism issues
+        scripted = torch.jit.trace(module, tuple(tensors), strict=False, check_trace=False)
     if file_path is not None:
         scripted.save(str(file_path))
     return scripted
