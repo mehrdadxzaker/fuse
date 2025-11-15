@@ -64,15 +64,26 @@ def compile(
     if cfg.device != device_spec:
         cfg = replace(cfg, device=device_spec).normalized()
     policy_obj = policies or RuntimePolicies()
+    # When falling back to NumPy for any reason, coerce config to a NumPy-safe
+    # setting (CPU device + fp32 precision) so behavior matches the NumPy
+    # backend invariants tested elsewhere.
+    def _numpy_safe_cfg(c: ExecutionConfig) -> ExecutionConfig:
+        new_cfg = c
+        if new_cfg.device not in {"auto", "cpu"}:
+            new_cfg = replace(new_cfg, device="cpu")
+        if new_cfg.precision in {"auto", "bf16", "fp16"}:
+            new_cfg = replace(new_cfg, precision="fp32")
+        return new_cfg.normalized()
+
     if cfg.mode == "demand":
-        return DemandNumpyRunner(program.ir, config=cfg, policies=policy_obj)
+        return DemandNumpyRunner(program.ir, config=_numpy_safe_cfg(cfg), policies=policy_obj)
     if cfg.projection_strategy == "monte_carlo":
-        return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
+        return NumpyRunner(program.ir, config=_numpy_safe_cfg(cfg), policies=policy_obj)
 
     if torch is None:
-        return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
+        return NumpyRunner(program.ir, config=_numpy_safe_cfg(cfg), policies=policy_obj)
     if program.ir.has_streaming():
-        return NumpyRunner(program.ir, config=cfg, policies=policy_obj)
+        return NumpyRunner(program.ir, config=_numpy_safe_cfg(cfg), policies=policy_obj)
 
     return TorchRunner(
         program=program,
