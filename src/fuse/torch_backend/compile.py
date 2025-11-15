@@ -85,13 +85,45 @@ def compile(
     if program.ir.has_streaming():
         return NumpyRunner(program.ir, config=_numpy_safe_cfg(cfg), policies=policy_obj)
 
-    return TorchRunner(
+    runner = TorchRunner(
         program=program,
         device=cfg.device,
         config=cfg,
         policies=policy_obj,
         cache_manager=cache_manager,
     )
+
+    # Write cache metadata if cache_manager is provided
+    if cache_manager is not None:
+        from ..core.cache import build_cache_key, cache_fingerprint
+        fingerprint = cache_fingerprint(
+            program_src=program.src,
+            backend="torch",
+            artifact="metadata",
+            device=cfg.device,
+            execution_config=cfg,
+            policies=policy_obj,
+        )
+        cache_key = build_cache_key(
+            program_src=program.src,
+            backend="torch",
+            artifact="metadata",
+            device=cfg.device,
+            execution_config=cfg,
+            policies=policy_obj,
+        )
+        cache_manager.write_metadata(
+            "torch",
+            cache_key,
+            {
+                "device": cfg.device,
+                "execution": cfg.mode,
+                "digest": program.digest,
+                "cache_fingerprint": fingerprint,
+            },
+        )
+
+    return runner
 
 
 # --------------------------------------------------------------------------- #
@@ -780,6 +812,57 @@ class TorchRunner:
                 except Exception:
                     self._fx_callable = self.fx_module
 
+    def pre_materialize_weights(self):
+        """Pre-materialize all weights to avoid non-deterministic tensor creation during tracing."""
+        if self.policies.weight_store is None:
+            return
+
+        # Collect all tensor names that are referenced in the program
+        referenced: Set[str] = set()
+
+        def _collect_refs(obj: Any) -> None:
+            if isinstance(obj, TensorRef):
+                referenced.add(obj.name)
+            elif isinstance(obj, Term):
+                for f in obj.factors:
+                    _collect_refs(f)
+            elif isinstance(obj, FuncCall):
+                if isinstance(obj.arg, tuple):
+                    for item in obj.arg:
+                        _collect_refs(item)
+                elif obj.arg is not None:
+                    _collect_refs(obj.arg)
+                for val in obj.kwargs.values():
+                    _collect_refs(val)
+
+        for eq in self.ir.equations:
+            if not eq.is_source:
+                _collect_refs(eq.rhs)
+
+        # Get defined names (outputs of equations) and source names (inputs)
+        defined = set(eq.lhs.name for eq in self.ir.equations)
+        sources = set(eq.lhs.name for eq in self.ir.equations if eq.is_source)
+
+        # Weights are referenced tensors that are neither defined nor sources
+        weight_names = referenced - defined - sources
+
+        # Pre-materialize each weight and also update the weight store to hold tensors
+        for name in weight_names:
+            if name not in self.tensors:
+                try:
+                    payload = self.policies.weight_store.resolve(name)
+                    # Materialize the weight as a tensor
+                    tensor = self._materialize_weight(name, payload)
+                    tensor = self._ensure_boolean_tensor(name, tensor)
+                    self.tensors[name] = tensor
+
+                    # IMPORTANT: Replace the weight in the store with the tensor version
+                    # This ensures future materializations won't call torch.as_tensor
+                    if hasattr(self.policies.weight_store, 'weights'):
+                        self.policies.weight_store.weights[name] = tensor.detach()
+                except KeyError:
+                    pass  # Weight might be optional or provided later
+
     # Public API -------------------------------------------------------------
     def __call__(
         self,
@@ -831,9 +914,11 @@ class TorchRunner:
                 if isinstance(val, torch.Tensor):
                     shape = tuple(int(s) for s in val.shape)
                     dtype_str = str(val.dtype)
-                    tensor_val = val.to(device=self.device)
-                    if tensor_val.dtype != self.default_dtype:
-                        tensor_val = tensor_val.to(dtype=self.default_dtype)
+                    # Only convert if not already on the correct device and dtype
+                    if val.device != self.device or val.dtype != self.default_dtype:
+                        tensor_val = val.to(device=self.device, dtype=self.default_dtype)
+                    else:
+                        tensor_val = val
                 else:
                     arr = np.asarray(val)
                     shape = tuple(int(s) for s in arr.shape)
@@ -957,7 +1042,16 @@ class TorchRunner:
             self._groups.append((name, group_map[name]))
 
     def _reset_state(self):
-        self.tensors = {}
+        # Preserve pre-materialized weights when resetting state
+        preserved_weights = {}
+        if hasattr(self, 'tensors'):
+            # Keep only weight tensors (those that aren't computed from equations)
+            defined = set(eq.lhs.name for eq in self.ir.equations)
+            for name, tensor in self.tensors.items():
+                if name not in defined:
+                    preserved_weights[name] = tensor
+
+        self.tensors = preserved_weights
         self.index_domains = {}
         self._last_temperatures.clear()
         self._active_equation_temperature = None
@@ -1994,9 +2088,10 @@ class TorchRunner:
         if not isinstance(tensor, torch.Tensor):
             tensor = self._as_tensor(tensor)
         else:
-            tensor = tensor.to(device=self.device)
-            if tensor.dtype != self.default_dtype:
-                tensor = tensor.to(dtype=self.default_dtype)
+            # Only convert if not already on the correct device and dtype
+            if tensor.device != self.device or tensor.dtype != self.default_dtype:
+                tensor = tensor.to(device=self.device, dtype=self.default_dtype)
+            # Otherwise keep the tensor as-is to avoid creating new variables during tracing
         return tensor
 
     def _dotted_axis(self, lhs: Optional[TensorRef]) -> Optional[int]:
