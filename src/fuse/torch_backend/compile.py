@@ -177,7 +177,7 @@ def _torch_gelu(x: torch.Tensor) -> torch.Tensor:
     elif device.type == 'cuda':
         # Check if CUDA device supports float64
         try:
-            test = torch.tensor([1.0], device=device, dtype=torch.float64)
+            torch.tensor([1.0], device=device, dtype=torch.float64)
             supports_float64 = True
         except (RuntimeError, TypeError):
             supports_float64 = False
@@ -606,7 +606,7 @@ def _torch_gelu_grad(x: torch.Tensor) -> torch.Tensor:
     elif device.type == 'cuda':
         # Check if CUDA device supports float64
         try:
-            test = torch.tensor([1.0], device=device, dtype=torch.float64)
+            torch.tensor([1.0], device=device, dtype=torch.float64)
             supports_float64 = True
         except (RuntimeError, TypeError):
             supports_float64 = False
